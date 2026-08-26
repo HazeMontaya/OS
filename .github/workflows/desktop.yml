@@ -1,0 +1,57 @@
+name: Build Portable OS.exe
+on:
+  push:
+    branches: [main]
+    tags: ['v*']
+  workflow_dispatch:
+permissions:
+  contents: write
+jobs:
+  portable-windows:
+    runs-on: windows-latest
+    env:
+      ELECTRON_VERSION: 44.0.0
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+      - name: Runtime tests
+        working-directory: Core/Runtime
+        run: node --test
+      - name: Desktop security smoke tests
+        run: node Core/Desktop/test/security.test.cjs
+      - name: PowerShell syntax check
+        shell: pwsh
+        run: |
+          Get-ChildItem -Recurse -Filter *.ps1 | ForEach-Object { $null = [scriptblock]::Create((Get-Content $_.FullName -Raw)) }
+      - name: Assemble portable OS root
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $release = Join-Path $PWD 'Release\OS'
+          New-Item -ItemType Directory -Force $release | Out-Null
+          $zip = Join-Path $env:RUNNER_TEMP 'electron.zip'
+          Invoke-WebRequest "https://github.com/electron/electron/releases/download/v$env:ELECTRON_VERSION/electron-v$env:ELECTRON_VERSION-win32-x64.zip" -OutFile $zip
+          Expand-Archive $zip $release -Force
+          Rename-Item (Join-Path $release 'electron.exe') 'OS.exe'
+          Remove-Item (Join-Path $release 'resources\default_app.asar') -Force -ErrorAction SilentlyContinue
+          $appDir = Join-Path $release 'resources\app'
+          New-Item -ItemType Directory -Force $appDir | Out-Null
+          Copy-Item 'Core\Desktop\main.cjs' $appDir
+          Copy-Item 'Core\Desktop\package.json' $appDir
+          foreach ($dir in @('Core','Config','Workspace','AI-Brain','Docs')) { Copy-Item $dir (Join-Path $release $dir) -Recurse -Force }
+          New-Item -ItemType Directory -Force (Join-Path $release 'Data'),(Join-Path $release 'Logs'),(Join-Path $release 'Models') | Out-Null
+          Copy-Item 'Models\README.md' (Join-Path $release 'Models\README.md') -Force
+          Set-Content (Join-Path $release 'VERSION') '0.8.0'
+          Compress-Archive (Join-Path $release '*') 'Release\OS-Windows-x64.zip' -Force
+      - uses: actions/upload-artifact@v4
+        with:
+          name: OS-Windows-x64
+          path: Release/OS-Windows-x64.zip
+      - name: Publish tagged release
+        if: startsWith(github.ref, 'refs/tags/v')
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh release create $env:GITHUB_REF_NAME 'Release\OS-Windows-x64.zip' --generate-notes --title "OS $env:GITHUB_REF_NAME"

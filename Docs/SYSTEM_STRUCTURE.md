@@ -2,44 +2,34 @@
 
 ```text
 OS/
-├─ AI-Brain/                  knowledge, memory guidance, operating rules
-├─ Config/
-│  └─ OS/runtime.json         runtime/provider/autonomy configuration
+├─ OS.exe                     portable desktop entry point
 ├─ Core/
-│  ├─ Runtime/
-│  │  ├─ src/                 server, agent, tools, memory, workflows, automations, MCP
-│  │  ├─ fixtures/            protocol test fixtures
-│  │  └─ test/                automated runtime tests
-│  ├─ UI/                     local browser interface
-│  └─ Scripts/                installation and maintenance
-├─ Data/
-│  ├─ Import/
-│  ├─ Export/
-│  └─ Memory/                 local runtime memory, ignored by Git
-├─ Docs/
-├─ Integrations/
-├─ Workspace/
-│  ├─ Agents/
-│  ├─ Automations/
-│  ├─ MCP/
-│  ├─ Skills/
-│  └─ Workflows/
-├─ INSTALL_OS.cmd
-└─ START_OS.cmd
+│  ├─ Desktop/                Electron desktop shell source
+│  ├─ Runtime/                local API, agent, providers, tools, memory, workflows, automations, MCP
+│  ├─ UI/                     desktop-rendered web UI
+│  └─ Scripts/                maintenance utilities
+├─ Config/OS/                 runtime configuration + model catalog
+├─ Workspace/                 agents, workflows, automations, MCP, skills
+├─ AI-Brain/                  knowledge and operating instructions
+├─ Models/                    local model/inference assets
+├─ Data/                      mutable runtime data
+├─ Logs/                      local logs
+└─ resources/app/             Electron bootstrap inside packaged runtime
 ```
 
 ## Execution path
 
 ```text
-Browser/UI
-  -> HTTP API
-  -> OS Agent
-  -> Memory context + Tool catalog
-  -> AI Provider (OpenCode/Claude/Codex)
-  -> Tool loop
-      -> local tools
-      -> MCP-discovered tools
-  -> response + optional Memory
+OS.exe
+  -> secure Electron main process
+  -> same executable in ELECTRON_RUN_AS_NODE mode
+  -> Core/Runtime HTTP API on 127.0.0.1
+  -> OS UI
+  -> Agent / Workflow / Tool / MCP / Memory systems
+  -> generic provider layer
+      -> OpenAI-compatible APIs
+      -> Anthropic Messages API
+      -> optional CLI/local adapters
 ```
 
-Workflows execute deterministic sequences of tools, memory writes and agent/provider steps. Automations invoke workflows on configured intervals.
+The product distribution has no installer and no start script. The portable folder is the application.

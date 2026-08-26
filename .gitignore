@@ -1,4 +1,7 @@
-# === LARGE BINARIES / PORTABLE RUNTIMES ===
+# Portable build output
+Release/
+
+# Large portable/development binaries
 Apps/
 Runtime/Node/
 Tools/
@@ -8,10 +11,14 @@ Temp/
 Logs/
 Recovery/
 
-# === LOCAL RUNTIME DATA ===
+# Local runtime data
 Data/Memory/
 
-# === CONFIG - SESSION DATA / CACHES ===
+# Local model weights; keep only documentation in Git
+Models/*
+!Models/README.md
+
+# Provider/session caches
 Config/Claude/backups/
 Config/Claude/cache/
 Config/Claude/.claude.json
@@ -19,31 +26,26 @@ Config/Codex/
 Config/Obsidian/
 Config/OpenCode/node_modules/
 
-# === IDE STATE ===
+# IDE / OS artifacts
 .vs/
-
-# === OS ARTIFACTS ===
 Thumbs.db
 Desktop.ini
 .DS_Store
 
-# === SECRETS ===
+# Secrets
 .env
 .env.*
 
-# === NODE ARTIFACTS ===
+# Node artifacts
 node_modules/
-package-lock.json
 .npm/
 
-# === NESTED GIT ===
+# Nested Git / development scratch
 AI-Brain/.git/
 AI-Brain/.git_ai_brain_backup/
-
-# === DEVELOPMENT WORKSPACES ===
 Workspace/Development/
 
-# === LEGACY FILES ===
+# Legacy local files
 CHECK_AI_BRAIN.ps1
 SETUP_AI_BRAIN_S_OS.ps1
 Docs/INSTALL_REFERENCE.cmd

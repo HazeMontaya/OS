@@ -1,72 +1,27 @@
-# OS
+# OS — portable AI desktop runtime
 
-Local-first AI operating runtime for Windows. The repository now contains an executable OS core rather than only a portable tool/vault layout.
+OS is built as a self-contained Windows desktop folder. There is no installer and no start script in the distribution.
 
-## Start
+## Run
+1. Download/extract `OS-Windows-x64.zip`.
+2. Open the extracted `OS` folder.
+3. Double-click `OS.exe`.
 
-```text
-INSTALL_OS.cmd
-START_OS.cmd
-```
+`OS.exe` includes the Electron/Node runtime required to start the local OS core. The portable root contains `Core`, `Config`, `Workspace`, `AI-Brain`, `Models`, `Data` and `Logs` beside the executable/runtime files.
 
-`INSTALL_OS.cmd` verifies the portable structure, Node.js >=20 and the runtime tests. `START_OS.cmd` runs StructureGuard and starts the local UI/API at `http://127.0.0.1:43110`.
+## AI providers
+OS uses a generic provider layer instead of hard-coding three CLIs. Supported transports include OpenAI-compatible APIs, Anthropic Messages API and optional CLI adapters. The current model catalog lives at `Config/OS/models.json` and includes OpenAI GPT-5.6, Claude 5, Gemini 3.7, Grok 4.6, DeepSeek V4, GLM 5.3, Kimi K3, MiniMax M3, MiMo V2.5, NVIDIA Nemotron 3 Ultra plus tracked local/open-weight models from Qwen and Gemma.
 
-## Implemented runtime
+API credentials are read from environment variables configured in `Config/OS/runtime.json`; secrets are never committed into the portable root.
 
-- Local HTTP API and browser UI
-- Provider failover: OpenCode -> Claude -> Codex (configurable)
-- Autonomous agent tool loop
-- Local tool registry: system info, root-scoped file list/read/write, shell execution
-- Persistent JSONL memory with deduplication/search
-- JSON workflow engine
-- Interval automation engine
-- MCP stdio client: initialize, tools/list, tools/call
-- Dynamic MCP tools can be registered into the agent tool registry
-- Structured JSONL runtime logging
-- Portable root detection
-- Runtime tests and GitHub Actions CI
+## Build
+GitHub Actions assembles `OS-Windows-x64.zip` from the official Electron Windows x64 runtime and this repository. A tagged `v*` build creates a GitHub Release automatically.
 
-## Main paths
-
-```text
-AI-Brain/                 knowledge and operating instructions
-Config/OS/runtime.json    OS runtime configuration
-Core/Runtime/             executable Node.js runtime
-Core/UI/                  local web interface
-Core/Scripts/             setup and maintenance
-Data/Memory/              runtime memory (local, ignored by Git)
-Workspace/Agents/         agent definitions
-Workspace/Workflows/      executable workflows
-Workspace/Automations/    automation definitions
-Workspace/MCP/            MCP server registry
-```
-
-## Provider configuration
-
-Edit `Config/OS/runtime.json`. The runtime checks commands on `PATH`. The portable `START_OS.cmd` places `Runtime/Node`, `Tools/npm-global` and portable Git/PowerShell on `PATH` before the runtime starts.
-
-Secrets must be supplied through environment variables or provider-native secure configuration; do not commit them.
-
-## API
-
-- `GET /api/health`
-- `POST /api/chat`
-- `GET|POST /api/memory`
-- `GET /api/tools`
-- `POST /api/tool`
-- `GET /api/workflows`
-- `POST /api/workflows/run`
-- `GET /api/automations`
-- `POST /api/automations/run`
-- `GET /api/mcp`
-- `POST /api/mcp/discover`
-- `POST /api/mcp/call`
-
-## Tests
-
-```text
-cd Core\Runtime
-npm test
-```
-
-No third-party npm packages are required by the OS runtime.
+## Source layout
+- `Core/Desktop` — secure Electron shell
+- `Core/Runtime` — local OS API/agent runtime
+- `Core/UI` — application UI
+- `Config/OS` — runtime and model catalog
+- `Workspace` — agents, workflows, automations, MCP
+- `AI-Brain` — knowledge/operating instructions
+- `Models` — local model/inference assets

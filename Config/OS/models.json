@@ -1,0 +1,25 @@
+{
+  "updatedAt":"2026-08-26",
+  "models":[
+    {"id":"gpt-5.6-sol","name":"GPT-5.6 Sol","provider":"openai","access":"api","openWeights":false,"roles":["reasoning","coding","research","computer-use"],"tier":"frontier"},
+    {"id":"gpt-5.6-terra","name":"GPT-5.6 Terra","provider":"openai","access":"api","openWeights":false,"roles":["general","coding","agents"],"tier":"balanced"},
+    {"id":"gpt-5.6-luna","name":"GPT-5.6 Luna","provider":"openai","access":"api","openWeights":false,"roles":["fast","general"],"tier":"efficient"},
+    {"id":"claude-opus-5","name":"Claude Opus 5","provider":"anthropic","access":"api","openWeights":false,"roles":["coding","knowledge-work","long-running-agents"],"tier":"frontier"},
+    {"id":"claude-sonnet-5","name":"Claude Sonnet 5","provider":"anthropic","access":"api","openWeights":false,"roles":["agents","coding","browser","terminal"],"tier":"balanced"},
+    {"id":"gemini-3.7-flash","name":"Gemini 3.7 Flash","provider":"google","access":"api","openWeights":false,"contextTokens":1048576,"roles":["multimodal","agents","computer-use","tool-use"],"tier":"balanced"},
+    {"id":"grok-4.6","name":"Grok 4.6","provider":"xai","access":"api","openWeights":false,"roles":["long-running-agents","coding","visual-work"],"tier":"frontier"},
+    {"id":"deepseek-v4-pro","name":"DeepSeek V4 Pro","provider":"deepseek","access":"api","openWeights":false,"roles":["agents","coding","reasoning"],"tier":"frontier"},
+    {"id":"deepseek-v4-flash","name":"DeepSeek V4 Flash","provider":"deepseek","access":"api","openWeights":false,"roles":["coding","fast","value"],"tier":"efficient"},
+    {"id":"glm-5.3","name":"GLM-5.3","provider":"zai","access":"api+weights","openWeights":true,"roles":["coding","long-horizon-agents"],"tier":"frontier-open"},
+    {"id":"glm-5.3-flash","name":"GLM-5.3 Flash","provider":"zai","access":"api+weights","openWeights":true,"roles":["multimodal","coding","agents","value"],"tier":"efficient-open"},
+    {"id":"kimi-k3","name":"Kimi K3","provider":"kimi","access":"api+weights","openWeights":true,"contextTokens":1000000,"roles":["multimodal","coding","long-horizon-agents"],"tier":"frontier-open"},
+    {"id":"MiniMax-M3","name":"MiniMax M3","provider":"minimax","access":"api+weights","openWeights":true,"contextTokens":1000000,"roles":["multimodal","coding","agents","computer-use"],"tier":"frontier-open"},
+    {"id":"mimo-v2.5-pro","name":"MiMo V2.5 Pro","provider":"mimo","access":"api+weights","openWeights":true,"contextTokens":1000000,"roles":["agents","coding","reasoning"],"tier":"frontier-open"},
+    {"id":"mimo-v2.5","name":"MiMo V2.5","provider":"mimo","access":"api+weights","openWeights":true,"contextTokens":1000000,"roles":["text","image","video","audio","agents"],"tier":"multimodal-open"},
+    {"id":"nvidia/nemotron-3-ultra-550b-a55b","name":"NVIDIA Nemotron 3 Ultra 550B-A55B","provider":"nvidia","access":"api+weights","openWeights":true,"contextTokens":1000000,"roles":["reasoning","agents","tool-use"],"tier":"frontier-open"},
+    {"id":"qwen3.8-flash-next","name":"Qwen3.8 Flash Next","provider":"local","access":"weights","openWeights":true,"contextTokens":262144,"roles":["multimodal","coding","office","tool-use"],"tier":"preview-open","selectable":false},
+    {"id":"qwen3.8-27b","name":"Qwen3.8 27B","provider":"local","access":"weights","openWeights":true,"roles":["local","coding","agents"],"tier":"local-open","selectable":false},
+    {"id":"gemma-4-26b-a4b","name":"Gemma 4 26B-A4B","provider":"local","access":"weights","openWeights":true,"roles":["local","reasoning","agents"],"tier":"local-open","selectable":false},
+    {"id":"diffusiongemma-26b","name":"DiffusionGemma 26B","provider":"local","access":"weights","openWeights":true,"roles":["local","fast-generation"],"tier":"experimental-open","selectable":false}
+  ]
+}

@@ -1,56 +1,6 @@
-<!doctype html>
-<html lang="de">
-<head>
-  <meta charset="utf-8" />
-  <meta name="viewport" content="width=device-width,initial-scale=1" />
-  <title>OS</title>
-  <link rel="stylesheet" href="/styles.css" />
-</head>
-<body>
-  <main>
-    <header>
-      <div>
-        <h1>OS</h1>
-        <p>Local AI Runtime</p>
-      </div>
-      <span id="status" class="pill">prüfe…</span>
-    </header>
-
-    <section class="grid stats" id="stats"></section>
-
-    <section class="panel">
-      <h2>Agent</h2>
-      <form id="chatForm">
-        <textarea id="prompt" rows="5" placeholder="Aufgabe an OS…" required></textarea>
-        <div class="row">
-          <select id="provider"><option value="">Provider automatisch</option></select>
-          <label><input id="remember" type="checkbox" /> Antwort merken</label>
-          <button type="submit">Ausführen</button>
-        </div>
-      </form>
-      <pre id="answer">Bereit.</pre>
-    </section>
-
-    <section class="grid two">
-      <div class="panel">
-        <h2>Memory</h2>
-        <form id="memoryForm" class="row">
-          <input id="memoryText" placeholder="Memory hinzufügen" required />
-          <button>Speichern</button>
-        </form>
-        <div id="memory"></div>
-      </div>
-      <div class="panel">
-        <h2>Workflows</h2>
-        <div id="workflows"></div>
-      </div>
-    </section>
-
-    <section class="grid two">
-      <div class="panel"><h2>Tools</h2><div id="tools"></div></div>
-      <div class="panel"><h2>MCP / Automationen</h2><pre id="runtimeMeta"></pre></div>
-    </section>
-  </main>
-  <script type="module" src="/app.js"></script>
-</body>
-</html>
+<!doctype html><html lang="de"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>OS</title><link rel="stylesheet" href="/styles.css"></head><body>
+<main><header><div><h1>OS</h1><p>Portable AI Desktop Runtime</p></div><span id="status" class="pill">prüfe…</span></header>
+<section class="grid stats" id="stats"></section>
+<section class="panel"><h2>Command Center</h2><form id="chatForm"><textarea id="prompt" rows="5" placeholder="Aufgabe an OS…" required></textarea><div class="row"><select id="model"><option value="">Modell automatisch</option></select><select id="provider"><option value="">Provider automatisch</option></select><label><input id="remember" type="checkbox"> Antwort merken</label><button type="submit">Ausführen</button></div></form><pre id="answer">Bereit.</pre></section>
+<section class="grid two"><div class="panel"><h2>Memory</h2><form id="memoryForm" class="row"><input id="memoryText" placeholder="Memory hinzufügen" required><button>Speichern</button></form><div id="memory"></div></div><div class="panel"><h2>Workflows</h2><div id="workflows"></div></div></section>
+<section class="grid two"><div class="panel"><h2>Tools</h2><div id="tools"></div></div><div class="panel"><h2>Provider / MCP / Automationen</h2><pre id="runtimeMeta"></pre></div></section></main><script type="module" src="/app.js"></script></body></html>
