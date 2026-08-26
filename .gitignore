@@ -42,3 +42,11 @@ Workspace/Development/sandbox-capability-audit/app-src/node_modules/
 Workspace/Development/sandbox-capability-audit/app-src/dist/
 
 AI-Brain/.git_ai_brain_backup/
+
+# Legacy files
+CHECK_AI_BRAIN.ps1
+SETUP_AI_BRAIN_S_OS.ps1
+Workspace/Development/
+Docs/INSTALL_REFERENCE.cmd
+Docs/SETUP_PERSONALJARVIS_REFERENCE.ps1
+Docs/REBUILD_NOTES.md
