@@ -18,16 +18,24 @@
     If specified, actively fixes issues (moves violations to Recovery\Quarantine).
 .PARAMETER LogFile
     Path to log file. Defaults to S:\OS\Logs\structure-guard.log
+.PARAMETER Root
+    OS root directory. Defaults to the repository root inferred from this script.
 #>
 param(
     [switch]$Enforce,
-    [string]$LogFile = "S:\OS\Logs\structure-guard.log"
+    [string]$LogFile,
+    [string]$Root
 )
 
 $ErrorActionPreference = "Continue"
-$Root = "S:\OS"
-$QuarantineBase = "S:\OS\Recovery\Quarantine"
+$scriptRoot = Split-Path -Parent (Split-Path -Parent (Split-Path -Parent $PSScriptRoot))
+if (-not $Root) { $Root = $scriptRoot }
+if (-not $LogFile) { $LogFile = Join-Path $Root "Logs\structure-guard.log" }
+$QuarantineBase = Join-Path $Root "Recovery\Quarantine"
 $Timestamp = Get-Date -Format "yyyyMMdd-HHmmss"
+$runEntries = [System.Collections.Generic.List[string]]::new()
+
+New-Item -ItemType Directory -Force -Path (Split-Path -Parent $LogFile) | Out-Null
 
 # Allowed root directories
 $AllowedRootDirs = @(
@@ -64,10 +72,25 @@ $VersionPatterns = @(
     "-test",
     "-temp"
 )
+$IgnoredPathPatterns = @(
+    "\\(Recovery|\.git|node_modules|\.obsidian|Cache|Temp|Logs|Downloads)(\\|$)",
+    "\\Apps\\VSCode\\data\\",
+    "\\Config\\Codex\\\.tmp\\",
+    "\\Config\\Obsidian\\"
+)
+
+function Test-IgnoredPath {
+    param([string]$Path)
+    foreach ($pattern in $IgnoredPathPatterns) {
+        if ($Path -match $pattern) { return $true }
+    }
+    return $false
+}
 
 function Write-Log {
     param([string]$Message, [string]$Level = "INFO")
     $logEntry = "[$(Get-Date -Format 'yyyy-MM-dd HH:mm:ss')] [$Level] $Message"
+    $runEntries.Add($logEntry)
     Add-Content -Path $LogFile -Value $logEntry -ErrorAction SilentlyContinue
     if ($Level -eq "ERROR") {
         Write-Host $logEntry -ForegroundColor Red
@@ -133,7 +156,7 @@ function Test-VersionedFiles {
     Write-Log "Checking for versioned files..."
     
     $allFiles = Get-ChildItem -Path $Root -Recurse -File -Force -ErrorAction SilentlyContinue |
-        Where-Object { $_.FullName -notmatch "\\(Recovery|\.git|node_modules|\.obsidian)\\" }
+        Where-Object { -not (Test-IgnoredPath $_.FullName) }
     
     foreach ($file in $allFiles) {
         foreach ($pattern in $VersionPatterns) {
@@ -199,8 +222,10 @@ function Test-DeadReferences {
     foreach ($file in $configFiles) {
         $content = Get-Content -Path $file.FullName -Raw -ErrorAction SilentlyContinue
         if ($content) {
-            # Check for S:\OS references
-            $matches = [regex]::Matches($content, 'S:\\OS\\[^\s"''`]+')
+            # Check absolute references that point into this portable root.
+            $escapedRoot = [regex]::Escape($Root.TrimEnd('\'))
+            $referencePattern = $escapedRoot + '\\[^\s"''`;,)\]+'
+            $matches = [regex]::Matches($content, $referencePattern, [System.Text.RegularExpressions.RegexOptions]::IgnoreCase)
             foreach ($match in $matches) {
                 $referencedPath = $match.Value
                 # Clean up path (remove trailing punctuation)
@@ -218,9 +243,9 @@ function Test-CacheLocations {
     Write-Log "Checking cache locations..."
     
     $cacheLocations = @(
-        "S:\OS\node_modules",
-        "S:\OS\.npm",
-        "S:\OS\.cache"
+        (Join-Path $Root "node_modules"),
+        (Join-Path $Root ".npm"),
+        (Join-Path $Root ".cache")
     )
     
     foreach ($loc in $cacheLocations) {
@@ -247,8 +272,8 @@ Test-CacheLocations
 Write-Log "=== Structure Guard Completed ===" "INFO"
 
 # Return summary
-$violations = (Get-Content -Path $LogFile -ErrorAction SilentlyContinue | Where-Object { $_ -match "\[ERROR\]" }).Count
-$warnings = (Get-Content -Path $LogFile -ErrorAction SilentlyContinue | Where-Object { $_ -match "\[WARN\]" }).Count
+$violations = @($runEntries | Where-Object { $_ -match "\[ERROR\]" }).Count
+$warnings = @($runEntries | Where-Object { $_ -match "\[WARN\]" }).Count
 
 Write-Host "`nSummary:" -ForegroundColor Cyan
 Write-Host "  Errors: $violations" -ForegroundColor $(if ($violations -gt 0) { "Red" } else { "Green" })

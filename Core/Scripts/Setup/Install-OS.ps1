@@ -5,8 +5,12 @@ param()
 $ErrorActionPreference = "Stop"
 $Root = Split-Path -Parent (Split-Path -Parent (Split-Path -Parent $PSScriptRoot))
 $requiredDirectories = @(
-    "AI-Brain", "Apps", "Cache", "Config", "Core", "Data", "Docs",
-    "Downloads", "Integrations", "Logs", "Recovery", "Runtime", "Temp", "Tools"
+    "AI-Brain", "Apps", "Cache", "Config", "Core",
+    "Data", "Data\Import", "Data\Export",
+    "Docs", "Downloads", "Integrations", "Logs", "Recovery", "Recovery\Quarantine",
+    "Runtime", "Temp", "Tools",
+    "Workspace", "Workspace\Agents", "Workspace\Automations",
+    "Workspace\MCP", "Workspace\Skills", "Workspace\Workflows"
 )
 $requiredFiles = @(
     "AI-Brain\AGENTS.md",
