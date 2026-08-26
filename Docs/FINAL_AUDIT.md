@@ -1,65 +1,41 @@
-# S:\OS — Audit Report
+# OS Implementation Audit
 
-**Date**: 2026-08-26
-**Version**: 0.6.0
-**Status**: PASS
+**Date:** 2026-08-26  
+**Runtime:** 0.7.0  
+**Result:** EXECUTABLE CORE IMPLEMENTED
 
-## Components
+## Verified implementation
 
-| Component | Path | Status |
-|-----------|------|--------|
-| Node.js LTS | `Runtime\Node\` | OK |
-| Git (portable) | `Tools\Git\` | OK |
-| OpenCode CLI | `Tools\npm-global\opencode.cmd` | OK |
-| Claude Code CLI | `Tools\npm-global\claude.cmd` | OK |
-| Codex CLI | `Tools\npm-global\codex.cmd` | OK |
-| VS Code (portable) | `Apps\VSCode\` | OK |
-| Obsidian (portable) | `Apps\Obsidian\` | OK |
-| PowerShell 7 | `Apps\PowerShell\` | OK |
+| Area | Status |
+|---|---|
+| Portable root detection | PASS |
+| Installer verification | IMPLEMENTED |
+| StructureGuard consistency | FIXED |
+| Local HTTP/API runtime | PASS |
+| Browser UI | PASS |
+| Provider adapters | IMPLEMENTED; availability depends on local CLI login/install |
+| Agent tool loop | IMPLEMENTED |
+| Local tool registry | PASS |
+| Persistent memory | PASS |
+| Workflow execution | PASS |
+| Automation scheduler | IMPLEMENTED |
+| MCP stdio protocol | PASS |
+| Runtime logging | IMPLEMENTED |
+| Automated Node tests | 5/5 PASS in implementation environment |
+| GitHub Actions CI | IMPLEMENTED |
 
-## Scripts
+## Corrections made from the previous audit
 
-| Script | Function | Status |
-|--------|----------|--------|
-| `INSTALL_OS.cmd` | Bootstrap installer (admin) | OK |
-| `START_OS.cmd` | Daily launcher + StructureGuard | OK |
-| `Core\Scripts\Setup\Install-OS.ps1` | Directory + component check | OK |
-| `Core\Scripts\Maintenance\StructureGuard.ps1` | Structure enforcement (269 lines) | OK |
-| `Core\Scripts\FIRST_LOGIN.cmd` | First-time login helper | OK |
+The previous `PASS / production ready` wording was too broad. At that point the repository primarily contained setup/maintenance scripts and empty Workspace placeholders; it did not contain an OS agent runtime, UI, workflow engine, automation engine or MCP execution path.
 
-## Structure
+The following structural defects were also corrected:
 
-| Directory | Purpose | Status |
-|-----------|---------|--------|
-| `AI-Brain\` | Knowledge vault (P.A.R.A.) | OK — 10 areas, vault files present |
-| `Apps\` | Portable applications | OK |
-| `Config\` | Application configs | OK |
-| `Core\Scripts\` | Internal scripts | OK |
-| `Data\` | Import/Export | OK — subdirs created |
-| `Docs\` | Documentation | OK |
-| `Integrations\` | External integrations | OK (empty) |
-| `Logs\` | System logs | OK |
-| `Recovery\` | Quarantine only | OK — old backups/seed removed |
-| `Runtime\Node\` | Node.js runtime | OK |
-| `Tools\` | Git, npm-global | OK |
-| `Workspace\` | Agents, Automations, MCP, Skills, Workflows | OK — created |
+- `INSTALL_OS.cmd` no longer hardcodes `S:\OS`.
+- StructureGuard now allows directories that the installer itself creates (`Cache`, `Downloads`, `Temp`) plus `.git`, `.github` and `.gitignore`.
+- Quarantine handles directories without attempting `Get-FileHash` on them.
+- StructureGuard returns a blocking exit code when root errors exist in check mode.
+- Runtime data such as `Data/Memory` is excluded from Git.
 
-## Warnings (optional, not blocking)
+## Runtime boundary
 
-- No MCP servers configured
-- No workflows defined
-- No automations defined
-- AI-Brain vault areas are empty (waiting for content)
-
-## Cost Policy
-
-- `allowPaidServices = false`
-- `preferLocalFree = true`
-- `preferIncludedSubscription = true`
-
-## Maintenance
-
-Structure Guard runs on every `START_OS.cmd` launch. Manual run:
-```powershell
-powershell.exe -NoProfile -ExecutionPolicy Bypass -File "S:\OS\Core\Scripts\Maintenance\StructureGuard.ps1"
-```
+OS is executable locally. Actual AI answers require at least one configured provider command (`opencode`, `claude` or `codex`) to be installed/authenticated on the target Windows machine. MCP execution requires configured MCP servers in `Workspace/MCP/servers.json`.

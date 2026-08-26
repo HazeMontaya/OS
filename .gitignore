@@ -1,4 +1,4 @@
-# === LARGE BINARIES (re-downloaded by installer) ===
+# === LARGE BINARIES / PORTABLE RUNTIMES ===
 Apps/
 Runtime/Node/
 Tools/
@@ -7,6 +7,9 @@ Downloads/
 Temp/
 Logs/
 Recovery/
+
+# === LOCAL RUNTIME DATA ===
+Data/Memory/
 
 # === CONFIG - SESSION DATA / CACHES ===
 Config/Claude/backups/
@@ -35,19 +38,14 @@ package-lock.json
 
 # === NESTED GIT ===
 AI-Brain/.git/
-
-# === DEVELOPMENT WORKSPACES (node_modules etc) ===
-Workspace/Development/sandbox-capability-audit/app-src/node_modules/
-
-# === WORKSPACE TEMP ===
-Workspace/Development/sandbox-capability-audit/app-src/dist/
-
 AI-Brain/.git_ai_brain_backup/
 
-# Legacy files
+# === DEVELOPMENT WORKSPACES ===
+Workspace/Development/
+
+# === LEGACY FILES ===
 CHECK_AI_BRAIN.ps1
 SETUP_AI_BRAIN_S_OS.ps1
-Workspace/Development/
 Docs/INSTALL_REFERENCE.cmd
 Docs/SETUP_PERSONALJARVIS_REFERENCE.ps1
 Docs/REBUILD_NOTES.md

@@ -1,0 +1,18 @@
+{
+  "host": "127.0.0.1",
+  "port": 43110,
+  "openBrowser": true,
+  "autonomy": {
+    "level": "high",
+    "allowShell": true,
+    "allowWriteInsideRoot": true,
+    "allowNetworkTools": true,
+    "maxToolIterations": 6,
+    "commandTimeoutMs": 120000
+  },
+  "providers": [
+    { "id": "opencode", "command": "opencode", "args": ["run", "{prompt}"], "enabled": true },
+    { "id": "claude", "command": "claude", "args": ["-p", "{prompt}"], "enabled": true },
+    { "id": "codex", "command": "codex", "args": ["exec", "{prompt}"], "enabled": true }
+  ]
+}

@@ -1,0 +1,8 @@
+{
+  "id": "os-core",
+  "name": "OS Core Agent",
+  "description": "Primary local orchestrator. Uses configured AI providers, OS tools, memory and workflows.",
+  "autonomy": "high",
+  "memory": true,
+  "tools": ["system.info", "fs.list", "fs.read", "fs.write", "shell.exec"]
+}

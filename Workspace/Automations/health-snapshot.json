@@ -1,0 +1,7 @@
+{
+  "id": "health-snapshot",
+  "enabled": false,
+  "everySeconds": 3600,
+  "workflow": "system-health",
+  "input": {}
+}

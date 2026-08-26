@@ -1,0 +1,24 @@
+name: OS CI
+on:
+  push:
+    branches: [main]
+  pull_request:
+jobs:
+  runtime-test:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Runtime tests
+        working-directory: Core/Runtime
+        run: npm test
+      - name: PowerShell syntax check
+        shell: pwsh
+        run: |
+          $files = Get-ChildItem -Recurse -Filter *.ps1
+          foreach ($file in $files) {
+            $null = [scriptblock]::Create((Get-Content $file.FullName -Raw))
+            Write-Host "OK $($file.FullName)"
+          }
