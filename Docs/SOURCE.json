@@ -1,0 +1,9 @@
+{
+  "name": "PersonalJarvis",
+  "canonical_repository": "https://github.com/PersonalJarvis/PersonalJarvis",
+  "branch": "main",
+  "license": "MIT",
+  "target": "S:\\OS\\Reference\\PersonalJarvis",
+  "purpose": "OS architecture/source reference",
+  "runtime": false
+}

@@ -1,0 +1,44 @@
+# === LARGE BINARIES (re-downloaded by installer) ===
+Apps/
+Runtime/Node/
+Tools/
+Cache/
+Downloads/
+Temp/
+Logs/
+Recovery/
+
+# === CONFIG - SESSION DATA / CACHES ===
+Config/Claude/backups/
+Config/Claude/cache/
+Config/Codex/
+Config/Obsidian/
+Config/OpenCode/node_modules/
+
+# === IDE STATE ===
+.vs/
+
+# === OS ARTIFACTS ===
+Thumbs.db
+Desktop.ini
+.DS_Store
+
+# === SECRETS ===
+.env
+.env.*
+
+# === NODE ARTIFACTS ===
+node_modules/
+package-lock.json
+.npm/
+
+# === NESTED GIT ===
+AI-Brain/.git/
+
+# === DEVELOPMENT WORKSPACES (node_modules etc) ===
+Workspace/Development/sandbox-capability-audit/app-src/node_modules/
+
+# === WORKSPACE TEMP ===
+Workspace/Development/sandbox-capability-audit/app-src/dist/
+
+AI-Brain/.git_ai_brain_backup/

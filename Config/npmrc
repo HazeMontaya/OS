@@ -1,0 +1,5 @@
+﻿prefix=S:/OS/Tools/npm-global
+cache=S:/OS/Cache/npm
+fund=false
+audit=true
+update-notifier=true
