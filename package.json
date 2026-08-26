@@ -1,0 +1,13 @@
+{
+  "name": "haze-os",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Local-first AI desktop operating environment",
+  "engines": { "node": ">=22" },
+  "scripts": {
+    "start": "npm --prefix Core/Runtime start",
+    "test": "npm --prefix Core/Runtime test && npm --prefix Core/Desktop test",
+    "test:runtime": "npm --prefix Core/Runtime test",
+    "test:desktop": "npm --prefix Core/Desktop test"
+  }
+}

@@ -1,46 +1,35 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { WORKSPACE_DIR } from './paths.mjs';
-import { log } from './logger.mjs';
-
-const dir = path.join(WORKSPACE_DIR, 'Automations');
-
-function readAutomations() {
-  fs.mkdirSync(dir, { recursive: true });
-  return fs.readdirSync(dir).filter((name) => name.endsWith('.json')).map((name) => ({
-    file: name,
-    ...JSON.parse(fs.readFileSync(path.join(dir, name), 'utf8').replace(/^\uFEFF/, ''))
-  }));
+const DIR = path.join(WORKSPACE_DIR, 'Automations');
+function loadAutomations() {
+  if (!fs.existsSync(DIR)) return [];
+  return fs.readdirSync(DIR).filter((name) => name.endsWith('.json')).flatMap((name) => {
+    try { const value = JSON.parse(fs.readFileSync(path.join(DIR, name), 'utf8')); return value?.id ? [{ ...value, file: name }] : []; } catch { return []; }
+  });
 }
-
-export function createAutomationEngine(workflows) {
+export function createAutomationEngine({ workflows, audit, events }) {
   const timers = new Map();
-  const runAutomation = async (automation) => {
-    try {
-      const result = await workflows.run(automation.workflow, automation.input || {});
-      log('info', 'automation.completed', { automation: automation.id, workflow: automation.workflow });
-      return result;
-    } catch (error) {
-      log('error', 'automation.failed', { automation: automation.id, error: error.message });
-      return null;
+  async function run(id, context = {}) {
+    const automation = loadAutomations().find((item) => item.id === id);
+    if (!automation) throw new Error(`Unknown automation: ${id}`);
+    if (!automation.workflow) throw new Error(`Automation ${id} has no workflow`);
+    events?.publish('automation.started', { id });
+    const result = await workflows.run(automation.workflow, automation.input || {}, context);
+    audit?.append('automation.run', { automation: id, workflow: automation.workflow });
+    events?.publish('automation.completed', { id });
+    return result;
+  }
+  function start() {
+    stop();
+    for (const automation of loadAutomations()) {
+      const everyMs = Number(automation.everyMs || (automation.everySeconds ? Number(automation.everySeconds) * 1000 : 0));
+      if (automation.enabled !== true || everyMs < 60_000) continue;
+      const timer = setInterval(() => run(automation.id).catch((error) => events?.publish('automation.failed', { id: automation.id, error: error.message })), everyMs);
+      timer.unref?.(); timers.set(automation.id, timer);
     }
-  };
-
-  return {
-    list: () => readAutomations(),
-    start: () => {
-      for (const automation of readAutomations()) {
-        if (automation.enabled === false || !automation.everySeconds) continue;
-        const ms = Math.max(60, Number(automation.everySeconds)) * 1000;
-        timers.set(automation.id, setInterval(() => runAutomation(automation), ms));
-      }
-      return timers.size;
-    },
-    stop: () => { for (const timer of timers.values()) clearInterval(timer); timers.clear(); },
-    run: (id) => {
-      const automation = readAutomations().find((x) => x.id === id || x.file === id);
-      if (!automation) throw new Error(`Automation not found: ${id}`);
-      return runAutomation(automation);
-    }
-  };
+    return timers.size;
+  }
+  function stop() { for (const timer of timers.values()) clearInterval(timer); timers.clear(); }
+  return { list: () => loadAutomations().map((item) => ({ ...item, scheduled: timers.has(item.id) })), run, start, stop };
 }
