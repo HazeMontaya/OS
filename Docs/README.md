@@ -7,7 +7,7 @@ Entwicklungs-/Architektur-Referenz für **OS** ein.
 
 ## Installation
 
-1. `INSTALL_REFERENCE.cmd` doppelklicken.
+1. Klone das Repository manuell nach `S:\OS\Reference\PersonalJarvis`.
 2. Das Repository wird nach:
    `S:\OS\Reference\PersonalJarvis`
    geklont.
@@ -19,7 +19,7 @@ Entwicklungs-/Architektur-Referenz für **OS** ein.
 
 ## Später aktualisieren
 
-`S:\OS\Reference\UPDATE_PERSONALJARVIS_REFERENCE.cmd`
+Aktualisiere den Klon mit `git pull` im Referenzordner.
 
 Die Referenz wird dabei absichtlich wieder auf den aktuellen Stand von
 `origin/main` gesetzt. Eigene Änderungen gehören NICHT in den Referenzordner.

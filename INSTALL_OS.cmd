@@ -19,9 +19,9 @@ if %errorLevel% neq 0 (
 set "ROOT=S:\OS"
 set "PATH=S:\OS\Runtime\Node;S:\OS\Tools\npm-global;S:\OS\Tools\Git\cmd;S:\OS\Apps\PowerShell;%PATH%"
 
-:: Run setup
+:: Run portable bootstrap
 echo Starting installation...
-powershell.exe -NoProfile -ExecutionPolicy Bypass -File "%~dp0SETUP_AI_BRAIN_S_OS.ps1"
+powershell.exe -NoProfile -ExecutionPolicy Bypass -File "%~dp0Core\Scripts\Setup\Install-OS.ps1"
 
 if errorlevel 1 (
     echo.

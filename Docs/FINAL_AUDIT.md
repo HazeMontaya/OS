@@ -55,7 +55,7 @@
 - **File**: `INSTALL_OS.cmd`
 - **Function**: Requests admin privileges, runs setup
 - **Status**: Functional
-- **Dependencies**: `SETUP_AI_BRAIN_S_OS.ps1`
+- **Bootstrap**: `Core\Scripts\Setup\Install-OS.ps1`
 
 ### 5. Startup ✅ PASS
 - **File**: `START_OS.cmd`
@@ -108,7 +108,7 @@ All scripts validated:
 - `INSTALL_OS.cmd` - Valid batch syntax
 - `START_OS.cmd` - Valid batch syntax
 - `StructureGuard.ps1` - Valid PowerShell syntax
-- `SETUP_AI_BRAIN_S_OS.ps1` - Valid PowerShell syntax
+- `Core\Scripts\Setup\Install-OS.ps1` - Valid PowerShell syntax
 
 ### 14. Dead References ✅ PASS
 No broken paths found in:
@@ -122,7 +122,7 @@ No broken paths found in:
 - **Backup files**: Archived in `Recovery\Archive\`
 
 ### 16. Legacy Cleanup ✅ PASS
-**Archived files**:
+**Previously archived files**:
 - `SETUP_OS.ps1` → `Recovery\Archive\setup-scripts\`
 - `SETUP_OS_DESKTOP_V06.ps1` → `Recovery\Archive\setup-scripts\`
 - `INSTALL_OS.cmd` (old) → `Recovery\Archive\setup-scripts\`
@@ -134,7 +134,7 @@ No broken paths found in:
 - `90-ARCHIVE\` → `Recovery\Archive\`
 - `seed\` → `Recovery\seed\`
 
-**Removed files**:
+**Removed runtime artifacts**:
 - Temp files (DLLs, .node files)
 - Download archives
 - Old logs
@@ -143,7 +143,7 @@ No broken paths found in:
 ## Recommendations
 
 ### Immediate Actions
-None required. System is clean and functional.
+Keep portable runtime components installed under the ignored runtime directories.
 
 ### Optional Improvements
 1. **MCP Configuration**: Add MCP servers if needed

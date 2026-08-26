@@ -51,10 +51,13 @@ S:\OS\
 - Structure Guard: `S:\OS\Core\Scripts\Maintenance\StructureGuard.ps1`
 
 ## Diagnose
-Run health check:
+Run the structure check:
 ```powershell
-powershell.exe -File "S:\OS\CHECK_AI_BRAIN.ps1"
+powershell.exe -NoProfile -ExecutionPolicy Bypass -File "S:\OS\Core\Scripts\Maintenance\StructureGuard.ps1"
 ```
+
+The installer bootstrap is `Core\Scripts\Setup\Install-OS.ps1`. It prepares the
+portable directory structure and verifies the required runtime components.
 
 ## Maintenance
 Structure Guard checks for:
