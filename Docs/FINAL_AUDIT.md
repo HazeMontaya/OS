@@ -1,20 +1,25 @@
-# OS implementation audit
+# OS 1.0 Rebuild Audit
 
-**Date:** 2026-08-26  
-**Runtime:** 0.8.0  
-**Milestone:** PORTABLE DESKTOP FOUNDATION
+Date: 2026-08-27
 
-## Implemented in this milestone
-- Installer/start scripts removed from the target product flow.
-- Secure Electron desktop shell added.
-- Electron executable runs the Node runtime through `ELECTRON_RUN_AS_NODE`; a separate Node installation is not required in the packaged OS folder.
-- GitHub Actions assembles a portable `OS-Windows-x64.zip` containing `OS.exe` and all required Electron runtime files.
-- `OS_ROOT` makes the runtime relocatable inside the portable folder.
-- Generic OpenAI-compatible provider transport added.
-- Native Anthropic Messages adapter added.
-- Current model catalog added at `Config/OS/models.json`.
-- Model selection exposed through `/api/models` and the UI.
-- Local model assets have a canonical root directory at `Models/`.
+## Rebuild scope
 
-## Boundary
-Cloud models still require their provider credentials. Local open-weight models require a bundled/selected inference backend and model weights; those large binaries are intentionally not stored in Git.
+- Runtime decomposed into kernel services.
+- Policy, audit and events added as first-class layers.
+- Mutating actions now use explicit approval gates.
+- Shell disabled by default.
+- Root path containment enforced.
+- Provider routing retained with environment-only credentials.
+- MCP lifecycle isolated behind explicit authorization.
+- UI rebuilt into Command, Overview, Agent, Workflow, Memory, Tool/MCP and Security views.
+- Electron security hardened.
+- CI consolidated around the root test suite.
+- Portable Windows build updated to OS 1.0.
+
+## Verification
+
+Local Node.js 22 test run: 8/8 tests passed before commit.
+
+## Preserved data
+
+The rebuild intentionally preserves the existing `AI-Brain`, `Workspace`, `Config/OS/models.json`, model documentation and user data layout.

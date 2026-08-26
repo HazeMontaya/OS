@@ -1,27 +1,40 @@
-# OS — portable AI desktop runtime
+# OS
 
-OS is built as a self-contained Windows desktop folder. There is no installer and no start script in the distribution.
+Local-first AI desktop operating environment for Windows. OS combines a secure Electron shell, a modular Node.js runtime, provider routing, tools, memory, workflows, automations, MCP integrations, audit logging and a visual control plane.
 
-## Run
-1. Download/extract `OS-Windows-x64.zip`.
-2. Open the extracted `OS` folder.
-3. Double-click `OS.exe`.
+## Architecture
 
-`OS.exe` includes the Electron/Node runtime required to start the local OS core. The portable root contains `Core`, `Config`, `Workspace`, `AI-Brain`, `Models`, `Data` and `Logs` beside the executable/runtime files.
+- `Core/Desktop` — hardened Electron shell
+- `Core/Runtime` — kernel, policy, audit, providers, agents, tools, memory, workflows, automations and MCP
+- `Core/UI` — responsive AI control plane
+- `Config/OS` — runtime policy and model catalog
+- `Workspace` — user-defined agents, workflows, automations, MCP and skills
+- `AI-Brain` — operating knowledge and system instructions
+- `Data` — local runtime state
+- `Models` — local model assets
+- `Logs` — local logs
 
-## AI providers
-OS uses a generic provider layer instead of hard-coding three CLIs. Supported transports include OpenAI-compatible APIs, Anthropic Messages API and optional CLI adapters. The current model catalog lives at `Config/OS/models.json` and includes OpenAI GPT-5.6, Claude 5, Gemini 3.7, Grok 4.6, DeepSeek V4, GLM 5.3, Kimi K3, MiniMax M3, MiMo V2.5, NVIDIA Nemotron 3 Ultra plus tracked local/open-weight models from Qwen and Gemma.
+## Run from source
 
-API credentials are read from environment variables configured in `Config/OS/runtime.json`; secrets are never committed into the portable root.
+Requirements: Node.js 22+.
 
-## Build
-GitHub Actions assembles `OS-Windows-x64.zip` from the official Electron Windows x64 runtime and this repository. A tagged `v*` build creates a GitHub Release automatically.
+```bash
+npm test
+npm start
+```
 
-## Source layout
-- `Core/Desktop` — secure Electron shell
-- `Core/Runtime` — local OS API/agent runtime
-- `Core/UI` — application UI
-- `Config/OS` — runtime and model catalog
-- `Workspace` — agents, workflows, automations, MCP
-- `AI-Brain` — knowledge/operating instructions
-- `Models` — local model/inference assets
+Open `http://127.0.0.1:43110`.
+
+Provider credentials are read exclusively from environment variables. Copy `.env.example` as a reference; do not commit credentials.
+
+## Security defaults
+
+OS binds to loopback only. Electron runs with `contextIsolation`, sandboxing and Node integration disabled. Mutating tools require explicit approval by default. Shell execution is disabled by default and can be enabled only through `Config/OS/runtime.json`.
+
+## Portable Windows build
+
+GitHub Actions assembles a portable `OS-Windows-x64.zip`. The archive contains `OS.exe` plus the OS runtime/config/workspace. No installer is required.
+
+## Documentation
+
+See `Docs/ARCHITECTURE.md`, `Docs/SECURITY.md`, `Docs/DEVELOPMENT.md` and `Docs/ROADMAP.md`.

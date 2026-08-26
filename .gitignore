@@ -1,24 +1,29 @@
-# Portable build output
+# Build output
 Release/
+dist/
+coverage/
 
-# Large portable/development binaries
-Apps/
-Runtime/Node/
-Tools/
+# Runtime and mutable local state
+Logs/
+Data/Runtime/
+Data/Memory/
 Cache/
 Downloads/
 Temp/
-Logs/
 Recovery/
 
-# Local runtime data
-Data/Memory/
-
-# Local model weights; keep only documentation in Git
+# Large/local binaries and models
+Apps/
+Runtime/Node/
+Tools/
 Models/*
 !Models/README.md
 
-# Provider/session caches
+# Node
+node_modules/
+.npm/
+
+# Provider/application caches
 Config/Claude/backups/
 Config/Claude/cache/
 Config/Claude/.claude.json
@@ -26,28 +31,22 @@ Config/Codex/
 Config/Obsidian/
 Config/OpenCode/node_modules/
 
-# IDE / OS artifacts
+# Secrets
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+
+# IDE / OS
 .vs/
+.vscode/*.local.*
+.idea/
 Thumbs.db
 Desktop.ini
 .DS_Store
 
-# Secrets
-.env
-.env.*
-
-# Node artifacts
-node_modules/
-.npm/
-
-# Nested Git / development scratch
+# Nested repositories and scratch
 AI-Brain/.git/
 AI-Brain/.git_ai_brain_backup/
 Workspace/Development/
-
-# Legacy local files
-CHECK_AI_BRAIN.ps1
-SETUP_AI_BRAIN_S_OS.ps1
-Docs/INSTALL_REFERENCE.cmd
-Docs/SETUP_PERSONALJARVIS_REFERENCE.ps1
-Docs/REBUILD_NOTES.md

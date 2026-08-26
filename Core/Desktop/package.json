@@ -1,1 +1,8 @@
-{"name":"os-desktop","version":"0.8.0","main":"main.cjs","private":true}
+{
+  "name": "@haze-os/desktop",
+  "version": "1.0.0",
+  "private": true,
+  "main": "main.cjs",
+  "scripts": { "test": "node --test" },
+  "devDependencies": { "electron": "^44.0.0" }
+}

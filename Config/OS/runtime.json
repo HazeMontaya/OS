@@ -1,16 +1,31 @@
 {
-  "host":"127.0.0.1","port":43110,"openBrowser":false,
-  "autonomy":{"level":"high","allowShell":true,"allowWriteInsideRoot":true,"allowNetworkTools":true,"maxToolIterations":6,"commandTimeoutMs":120000},
-  "providers":[
-    {"id":"openai","transport":"openai","baseUrl":"https://api.openai.com/v1","apiKeyEnv":"OPENAI_API_KEY","defaultModel":"gpt-5.6-terra","models":["gpt-5.6-sol","gpt-5.6-terra","gpt-5.6-luna"],"enabled":true},
-    {"id":"anthropic","transport":"anthropic","baseUrl":"https://api.anthropic.com/v1","apiKeyEnv":"ANTHROPIC_API_KEY","defaultModel":"claude-sonnet-5","models":["claude-opus-5","claude-sonnet-5"],"enabled":true},
-    {"id":"google","transport":"openai","baseUrl":"https://generativelanguage.googleapis.com/v1beta/openai","apiKeyEnv":"GEMINI_API_KEY","defaultModel":"gemini-3.7-flash","models":["gemini-3.7-flash"],"enabled":true},
-    {"id":"xai","transport":"openai","baseUrl":"https://api.x.ai/v1","apiKeyEnv":"XAI_API_KEY","defaultModel":"grok-4.6","models":["grok-4.6"],"enabled":true},
-    {"id":"deepseek","transport":"openai","baseUrl":"https://api.deepseek.com","apiKeyEnv":"DEEPSEEK_API_KEY","defaultModel":"deepseek-v4-pro","models":["deepseek-v4-pro","deepseek-v4-flash"],"enabled":true},
-    {"id":"zai","transport":"openai","baseUrl":"https://api.z.ai/api/paas/v4","apiKeyEnv":"ZAI_API_KEY","defaultModel":"glm-5.3","models":["glm-5.3","glm-5.3-flash"],"enabled":true},
-    {"id":"kimi","transport":"openai","baseUrl":"https://api.moonshot.ai/v1","apiKeyEnv":"MOONSHOT_API_KEY","defaultModel":"kimi-k3","models":["kimi-k3"],"enabled":true},
-    {"id":"minimax","transport":"openai","baseUrl":"https://api.minimax.io/v1","apiKeyEnv":"MINIMAX_API_KEY","defaultModel":"MiniMax-M3","models":["MiniMax-M3"],"enabled":true},
-    {"id":"mimo","transport":"openai","baseUrl":"https://api.xiaomimimo.com/v1","apiKeyEnv":"MIMO_API_KEY","defaultModel":"mimo-v2.5-pro","models":["mimo-v2.5-pro","mimo-v2.5"],"enabled":true},
-    {"id":"nvidia","transport":"openai","baseUrl":"https://integrate.api.nvidia.com/v1","apiKeyEnv":"NVIDIA_API_KEY","defaultModel":"nvidia/nemotron-3-ultra-550b-a55b","models":["nvidia/nemotron-3-ultra-550b-a55b"],"enabled":true}
+  "host": "127.0.0.1",
+  "port": 43110,
+  "openBrowser": false,
+  "requestBodyLimitBytes": 2097152,
+  "providerTimeoutMs": 120000,
+  "autonomy": {
+    "mode": "supervised",
+    "maxToolIterations": 8,
+    "commandTimeoutMs": 120000
+  },
+  "policy": {
+    "allowWriteInsideRoot": true,
+    "allowShell": false,
+    "allowNetworkTools": true,
+    "requireApprovalForMutations": true,
+    "allowedShellCommands": []
+  },
+  "providers": [
+    {"id":"openai","transport":"openai","baseUrl":"https://api.openai.com/v1","apiKeyEnv":"OPENAI_API_KEY","enabled":true},
+    {"id":"anthropic","transport":"anthropic","baseUrl":"https://api.anthropic.com/v1","apiKeyEnv":"ANTHROPIC_API_KEY","enabled":true},
+    {"id":"google","transport":"openai","baseUrl":"https://generativelanguage.googleapis.com/v1beta/openai","apiKeyEnv":"GEMINI_API_KEY","enabled":true},
+    {"id":"xai","transport":"openai","baseUrl":"https://api.x.ai/v1","apiKeyEnv":"XAI_API_KEY","enabled":true},
+    {"id":"deepseek","transport":"openai","baseUrl":"https://api.deepseek.com","apiKeyEnv":"DEEPSEEK_API_KEY","enabled":true},
+    {"id":"zai","transport":"openai","baseUrl":"https://api.z.ai/api/paas/v4","apiKeyEnv":"ZAI_API_KEY","enabled":true},
+    {"id":"kimi","transport":"openai","baseUrl":"https://api.moonshot.ai/v1","apiKeyEnv":"MOONSHOT_API_KEY","enabled":true},
+    {"id":"minimax","transport":"openai","baseUrl":"https://api.minimax.io/v1","apiKeyEnv":"MINIMAX_API_KEY","enabled":true},
+    {"id":"mimo","transport":"openai","baseUrl":"https://api.xiaomimimo.com/v1","apiKeyEnv":"MIMO_API_KEY","enabled":true},
+    {"id":"nvidia","transport":"openai","baseUrl":"https://integrate.api.nvidia.com/v1","apiKeyEnv":"NVIDIA_API_KEY","enabled":true}
   ]
 }

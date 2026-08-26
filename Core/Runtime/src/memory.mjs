@@ -1,47 +1,52 @@
 import fs from 'node:fs';
-import path from 'node:path';
 import crypto from 'node:crypto';
-import { DATA_DIR } from './paths.mjs';
+import { MEMORY_FILE } from './paths.mjs';
 
-const dir = path.join(DATA_DIR, 'Memory');
-const file = path.join(dir, 'memory.jsonl');
-
-function ensure() {
-  fs.mkdirSync(dir, { recursive: true });
-  if (!fs.existsSync(file)) fs.writeFileSync(file, '', 'utf8');
+function normalize(value) {
+  return String(value || '').toLowerCase().normalize('NFKD');
 }
 
-export function addMemory({ text, type = 'semantic', tags = [], source = 'user', metadata = {} }) {
-  if (!text || typeof text !== 'string') throw new Error('Memory text is required');
-  ensure();
-  const normalized = text.trim();
-  const existing = searchMemory(normalized, 100).find((x) => x.text.toLowerCase() === normalized.toLowerCase());
-  if (existing) return { ...existing, deduplicated: true };
-  const item = {
-    id: crypto.randomUUID(),
-    ts: new Date().toISOString(),
-    type,
-    tags: Array.isArray(tags) ? tags : [],
-    source,
-    text: normalized,
-    metadata
-  };
-  fs.appendFileSync(file, `${JSON.stringify(item)}\n`, 'utf8');
-  return item;
-}
+export function createMemoryStore(file = MEMORY_FILE) {
+  function readAll() {
+    if (!fs.existsSync(file)) return [];
+    return fs.readFileSync(file, 'utf8').split(/\r?\n/).filter(Boolean).flatMap((line) => {
+      try { return [JSON.parse(line)]; } catch { return []; }
+    });
+  }
 
-export function listMemory(limit = 100) {
-  ensure();
-  const lines = fs.readFileSync(file, 'utf8').split(/\r?\n/).filter(Boolean);
-  return lines.slice(-Math.max(1, Math.min(Number(limit) || 100, 1000))).map((line) => JSON.parse(line)).reverse();
-}
+  function add(input = {}) {
+    const text = String(input.text || '').trim();
+    if (!text) throw new Error('text is required');
+    const record = {
+      id: crypto.randomUUID(),
+      ts: new Date().toISOString(),
+      type: String(input.type || 'semantic'),
+      source: String(input.source || 'manual'),
+      tags: Array.isArray(input.tags) ? input.tags.map(String).slice(0, 32) : [],
+      text: text.slice(0, 100_000),
+      metadata: input.metadata && typeof input.metadata === 'object' ? input.metadata : {}
+    };
+    fs.appendFileSync(file, `${JSON.stringify(record)}\n`, 'utf8');
+    return record;
+  }
 
-export function searchMemory(query = '', limit = 50) {
-  const q = String(query).trim().toLowerCase();
-  const items = listMemory(1000);
-  if (!q) return items.slice(0, limit);
-  return items.filter((item) => {
-    const hay = `${item.text} ${(item.tags || []).join(' ')} ${item.type}`.toLowerCase();
-    return hay.includes(q);
-  }).slice(0, limit);
+  function search(query = '', limit = 50) {
+    const items = readAll();
+    const needle = normalize(query).trim();
+    const cap = Math.min(Math.max(Number(limit) || 50, 1), 500);
+    if (!needle) return items.slice(-cap).reverse();
+    const terms = needle.split(/\s+/).filter(Boolean);
+    return items
+      .map((item) => {
+        const haystack = normalize(`${item.text} ${(item.tags || []).join(' ')} ${JSON.stringify(item.metadata || {})}`);
+        const score = terms.reduce((sum, term) => sum + (haystack.includes(term) ? 1 : 0), 0);
+        return { item, score };
+      })
+      .filter((entry) => entry.score > 0)
+      .sort((a, b) => b.score - a.score || String(b.item.ts).localeCompare(String(a.item.ts)))
+      .slice(0, cap)
+      .map((entry) => entry.item);
+  }
+
+  return { add, search, count: () => readAll().length };
 }
