@@ -1,14 +1,14 @@
 @echo off
 setlocal EnableExtensions
-title OS - GitHub nach S:\OS
+title OS - GitHub ersetzt S:\OS
 
 set "REPO_URL=https://github.com/HazeMontaya/OS.git"
 set "LOCAL_DIR=S:\OS"
 set "BRANCH=main"
-set "STASH_CREATED=0"
 
 echo ============================================================
-echo  OS SYNC: ONLINE GITHUB -^> %LOCAL_DIR%
+echo  OS MIRROR: ONLINE GITHUB -^> %LOCAL_DIR%
+echo  Der Online-Stand ersetzt den lokalen Repository-Inhalt.
 echo ============================================================
 echo.
 
@@ -26,24 +26,11 @@ if not exist "S:\" (
     exit /b 1
 )
 
-if not exist "%LOCAL_DIR%\.git" (
-    if exist "%LOCAL_DIR%" (
-        dir /b "%LOCAL_DIR%" 2>nul | findstr . >nul
-        if not errorlevel 1 (
-            echo [FEHLER] %LOCAL_DIR% existiert, ist aber kein Git-Repository und nicht leer.
-            echo Verschiebe oder leere den Ordner und starte erneut.
-            pause
-            exit /b 1
-        )
-    )
-
-    echo [INFO] Lokales Repository fehlt. Klone %REPO_URL% ...
-    git clone --branch "%BRANCH%" --single-branch "%REPO_URL%" "%LOCAL_DIR%"
-    if errorlevel 1 goto :git_error
-
-    echo.
-    echo [OK] Repository wurde nach %LOCAL_DIR% geklont.
-    goto :success
+if not exist "%LOCAL_DIR%" mkdir "%LOCAL_DIR%"
+if errorlevel 1 (
+    echo [FEHLER] %LOCAL_DIR% konnte nicht angelegt werden.
+    pause
+    exit /b 1
 )
 
 cd /d "%LOCAL_DIR%"
@@ -51,6 +38,12 @@ if errorlevel 1 (
     echo [FEHLER] Wechsel nach %LOCAL_DIR% fehlgeschlagen.
     pause
     exit /b 1
+)
+
+if not exist ".git" (
+    echo [INFO] Initialisiere vorhandenen Ordner als Git-Repository ...
+    git init
+    if errorlevel 1 goto :git_error
 )
 
 git remote get-url origin >nul 2>&1
@@ -61,48 +54,41 @@ if errorlevel 1 (
 )
 if errorlevel 1 goto :git_error
 
-for /f %%A in ('git status --porcelain') do set "HAS_CHANGES=1"
-if defined HAS_CHANGES (
-    echo [INFO] Lokale, noch nicht synchronisierte Aenderungen erkannt.
-    echo [INFO] Sichere sie automatisch als Git-Stash ...
-    git stash push --include-untracked -m "OS auto-backup before online download"
-    if errorlevel 1 goto :git_error
-    set "STASH_CREATED=1"
-)
-
-echo [INFO] Lade aktuellen Stand von GitHub ...
-git fetch --prune origin
+echo [INFO] Lade den aktuellen Online-Stand ...
+git fetch --prune origin "%BRANCH%"
 if errorlevel 1 goto :git_error
 
-echo [INFO] Setze lokalen Branch %BRANCH% exakt auf origin/%BRANCH% ...
+echo [INFO] Ersetze lokalen Branch durch origin/%BRANCH% ...
 git checkout -B "%BRANCH%" "origin/%BRANCH%"
 if errorlevel 1 goto :git_error
 
 git reset --hard "origin/%BRANCH%"
 if errorlevel 1 goto :git_error
 
-git submodule update --init --recursive
+echo [INFO] Entferne ALLE lokalen Dateien, die nicht zum Online-Repository gehoeren ...
+git clean -ffdx
 if errorlevel 1 goto :git_error
 
-:success
+echo [INFO] Synchronisiere Submodule exakt ...
+git submodule sync --recursive
+if errorlevel 1 goto :git_error
+git submodule update --init --recursive --force
+if errorlevel 1 goto :git_error
+git submodule foreach --recursive "git reset --hard && git clean -ffdx" >nul 2>&1
+
 echo.
 echo ============================================================
-echo [OK] ONLINE -^> LOKAL abgeschlossen.
-echo      Ziel: %LOCAL_DIR%
-echo      Branch: %BRANCH%
-if "%STASH_CREATED%"=="1" (
-    echo.
-    echo [HINWEIS] Vorherige lokale Aenderungen wurden gesichert.
-    echo           Anzeigen: cd /d %LOCAL_DIR% ^&^& git stash list
-    echo           Wiederherstellen: git stash pop
-)
+echo [OK] ONLINE -^> LOKAL SPIEGELUNG ABGESCHLOSSEN.
+echo      %LOCAL_DIR% entspricht jetzt origin/%BRANCH%.
+echo      Alte lokale Aenderungen und Zusatzdateien wurden entfernt.
 echo ============================================================
 pause
 exit /b 0
 
 :git_error
 echo.
-echo [FEHLER] Git-Vorgang fehlgeschlagen. Es wurde kein Force-Push ausgefuehrt.
+echo [FEHLER] Git-Vorgang fehlgeschlagen.
+echo Der lokale Stand konnte nicht vollstaendig ersetzt werden.
 echo Pruefe Netzwerk, GitHub-Anmeldung und die Meldungen oberhalb.
 pause
 exit /b 1
