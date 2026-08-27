@@ -8,7 +8,7 @@ import { listen } from "@tauri-apps/api/event";
 import AnalyticsPanel from "./analytics/AnalyticsPanel";
 import OsMark from "./brand/OsMark";
 import NodeInspector from "./inspector/NodeInspector";
-import SpatialRenderer from "./rendering/SpatialRenderer";
+import SpatialRenderer from "./rendering/SpatialRendererV4";
 import SettingsPanel from "./settings/SettingsPanel";
 import { useOsSettings } from "./settings/useOsSettings";
 import WorkspaceDock from "./workspaces/WorkspaceDock";
