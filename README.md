@@ -1,120 +1,153 @@
 # OS — Local-First Cognitive Operating Environment
 
-OS is a greenfield cognitive desktop platform: local-first, model-independent, observable and designed around a living temporal knowledge graph.
+OS is a Windows-first cognitive desktop environment with a Rust kernel, Tauri 2 shell, React/TypeScript experience layer and a Babylon.js WebGPU-first spatial cognition renderer.
 
-## Product thesis
+The UI is not the canonical state. Memory, graph, model activity and system events live in the core and are projected into the Black-Gold Cognitive Void.
 
-OS does not treat chat as the primary interface. Knowledge, memory, agents, tools, model activity and system state are first-class objects in a navigable Cognitive Void.
+## Windows: first boot
 
-The Spatial OS architecture makes this explicit: the visual world is a real-time projection of canonical core state and traceable system events, not a decorative animation layer.
+Canonical local repository: `S:\OS`
+
+1. If GitHub contains the newest source, run `GIT-DOWNLOAD.cmd` first.
+2. Run `OS-SETUP.cmd` once on the machine.
+3. Run `OS-START.cmd` whenever you want to start OS.
+
+`OS-SETUP.cmd` automatically checks/installs the Windows development/runtime prerequisites, configures the local-first Ollama model runtime, pulls the default chat and embedding models, installs repository dependencies, validates Rust/TypeScript and builds a real release executable.
+
+A successful setup produces:
+
+`S:\OS\target\release\os-desktop.exe`
+
+`OS-START.cmd` detects a missing or stale release executable and rebuilds it before launch, so the binary cannot silently lag behind the current Git `HEAD`.
+
+Other operational commands:
+
+- `OS-DOCTOR.cmd` — machine, runtime, model and toolchain diagnostics.
+- `OS-BUILD.cmd` — validated Windows release build.
+- `OS-BUILD.cmd --installer` — build an NSIS installer into ignored local `Artifacts\Windows`.
+- `OS-START.cmd -Dev` — Tauri development mode.
+- `OS-START.cmd -Rebuild` — force a release rebuild and then launch.
+
+Full Windows procedure: [`docs/WINDOWS_RUNBOOK.md`](docs/WINDOWS_RUNBOOK.md).
+
+## Default local AI runtime
+
+The automatic Windows setup uses Ollama's OpenAI-compatible local endpoint by default:
+
+- server: `http://127.0.0.1:11434`
+- chat model: `llama3.2:3b`
+- embedding model: `nomic-embed-text`
+
+The corresponding `OS_LLAMA_*` and `OS_EMBED_*` user environment values are only created when no user override already exists. `.env.example` documents all runtime variables. Cloud model providers remain optional.
+
+OS itself can boot when the model endpoint is unavailable; the UI remains usable and cognitive turns report the model transport problem until a compatible endpoint is restored.
 
 ## Core loop
 
-`Observe → Understand → Remember → Connect → Reason → Act → Evaluate → Learn → Reorganize`
+`Observe → Understand → Remember → Connect → Reason → Plan → Act → Verify → Learn → Reorganize`
 
 ## Stack
 
-- Rust kernel
-- Tokio async runtime target
-- Tauri 2 desktop shell
+- Rust + Tokio cognitive core
+- Tauri 2 / Microsoft Edge WebView2
 - React 19 + TypeScript
-- Babylon.js 9 cognitive visualization
-- WebGPU/WGSL preferred rendering path with graceful WebGL fallback
-- SQLite/FTS5 as canonical persistence target
-- Embedded vector retrieval target
-- Temporal knowledge graph
-- Capability-based agent/tool runtime
-- Local and optional cloud model gateway
-- Versioned event/state bridge between core and experience layer
+- Babylon.js 9
+- WebGPU/WGSL primary renderer with WebGL fallback
+- GPU-resident cognitive node/relation buffers on capable hardware
+- semantic LOD and GPU visibility evaluation
+- BVH spatial picking
+- SQLite / FTS5 canonical persistence
+- Lance/vector semantic retrieval
+- temporal knowledge graph
+- capability-based agent/tool/automation foundations
+- local and optional cloud model gateways
+
+## Spatial renderer status
+
+The production renderer is **GPU Spatial Phase 4**.
+
+On WebGPU-capable systems it uses packed node/edge storage buffers, WGSL semantic visibility/LOD and direct storage-to-vertex rendering without per-frame graph readback. Spatial interaction uses a BVH instead of a large field of invisible pick meshes. The validated Phase-3 batched renderer remains the deterministic fallback when WebGPU/compute initialization is unavailable.
+
+Experimental Phase-5 draw compaction/indirect rendering is intentionally not required for launch readiness. It must pass the same Windows/Tauri gates before it can replace the Phase-4 production path.
 
 ## Repository layout
 
-- `apps/desktop` — commercial desktop client and Cognitive Void
-- `crates/kernel` — privileged cognitive kernel
+- `apps/desktop` — Tauri/React Black-Gold desktop and Cognitive Void
+- `apps/cli` — runtime/doctor CLI
+- `apps/devtools` — developer diagnostics
+- `crates/kernel` — cognitive kernel
 - `crates/event-ledger` — append-oriented event foundation
-- `crates/memory` — memory compilation and lifecycle
-- `crates/knowledge-graph` — temporal graph foundation
-- `crates/contracts` — typed IPC/domain contracts
-- `docs` — product, architecture, security and roadmap
+- `crates/memory` — memory lifecycle
+- `crates/knowledge-graph` — temporal graph
+- `crates/semantic-index` — semantic/vector index
+- `crates/model-gateway` — local/cloud model clients
+- `crates/agents`, `crates/tools`, `crates/automation`, `crates/runtime`, `crates/system` — execution/runtime foundations
+- `packages/*` — protocol, renderer, visualization and design-system contracts
+- `docs` — architecture, security, visual system and operational runbooks
 
-## Spatial architecture
+## Architecture contracts
 
-The detailed implementation contract is maintained in:
+Key documents include:
 
-- [`docs/architecture/SPATIAL_OS_ARCHITECTURE.md`](docs/architecture/SPATIAL_OS_ARCHITECTURE.md) — full system/experience architecture
-- [`docs/architecture/IMPLEMENTATION_ROADMAP.md`](docs/architecture/IMPLEMENTATION_ROADMAP.md) — implementation milestones and acceptance criteria
-- [`docs/architecture/ADR-001-SPATIAL-STACK.md`](docs/architecture/ADR-001-SPATIAL-STACK.md) — accepted stack decision and guardrails
+- [`docs/OS_FINAL_PRODUCT_SPEC.md`](docs/OS_FINAL_PRODUCT_SPEC.md)
+- [`docs/architecture/SPATIAL_OS_ARCHITECTURE.md`](docs/architecture/SPATIAL_OS_ARCHITECTURE.md)
+- [`docs/architecture/IMPLEMENTATION_ROADMAP.md`](docs/architecture/IMPLEMENTATION_ROADMAP.md)
+- [`docs/architecture/ADR-001-SPATIAL-STACK.md`](docs/architecture/ADR-001-SPATIAL-STACK.md)
+- [`docs/GPU_SPATIAL_PHASE_4_GRAPH.md`](docs/GPU_SPATIAL_PHASE_4_GRAPH.md)
+- [`docs/WINDOWS_RUNBOOK.md`](docs/WINDOWS_RUNBOOK.md)
 
-Core rules: the kernel must remain headless-capable; the renderer must not own canonical state; visual activity must correspond to real events; models and tools remain replaceable; capability boundaries cannot be bypassed by agents or UI code.
+Core rules: the kernel remains headless-capable; the renderer never owns canonical state; visual activity corresponds to real state/events; models and tools remain replaceable; capability boundaries cannot be bypassed by agent or UI code.
 
-## Windows Git synchronization
+## Git mirror synchronization
 
-The canonical local working directory is `S:\OS` and the canonical remote is `https://github.com/HazeMontaya/OS.git` on branch `main`.
+The canonical remote is `HazeMontaya/OS`, branch `main`, and the canonical Windows working directory is `S:\OS`.
 
-The two root-level command files use **strict source-wins mirror semantics**. The selected source replaces the destination repository rather than being merged with it.
+- `GIT-DOWNLOAD.cmd`: **online source wins**. It prepares a fresh verified clone, atomically replaces `S:\OS`, and removes stale local source/build/runtime remnants.
+- `GIT-UPLOAD.cmd`: **local source wins**. It writes a fresh repository tree from the current versionable `S:\OS` filesystem and replaces the online source tree. GitHub's current `origin/main` is used as the parent so a concurrent online update causes the push to fail instead of being silently overwritten.
 
-### Online → local
+Files at or above 95 MiB plus build output, models, runtime databases, cognition data, archives/installers and secrets are excluded from source synchronization.
 
-`GIT-DOWNLOAD.cmd` treats GitHub `origin/main` as authoritative.
+**Important:** after online implementation work, run `GIT-DOWNLOAD.cmd` before any local source-wins upload. Otherwise an older local filesystem can intentionally remove newer online source.
 
-The command copies itself to `%TEMP%`, creates a completely fresh verified clone at `S:\OS.__incoming__`, enables Git long-path handling, synchronizes submodules, hard-resets and cleans the clone, verifies that `HEAD` exactly matches `origin/main`, then swaps the old `S:\OS` out and activates the new clone. Only after the new clone is active is the old `S:\OS.__old__` removed.
+## Manual development
 
-This means old local tracked files, ignored build files, runtime data, untracked files and stale `.git` state do not survive a successful download mirror.
-
-### Local → online
-
-`GIT-UPLOAD.cmd` treats the current filesystem content under `S:\OS` as authoritative.
-
-The command does **not** push arbitrary local Git history. It creates a fresh temporary Git index from the current filesystem, respecting `.gitignore`, then writes a new repository tree and creates a mirror commit directly on top of the current `origin/main`. The resulting online tree therefore removes every old online file that is not part of the current clean local source tree.
-
-Before the tree is written, every candidate upload file is checked. Files at or above **95 MiB** are automatically excluded from normal GitHub Git synchronization, recorded in `S:\OS\.os-sync-excluded-local.txt`, and kept local. This gives safety margin below GitHub's 100 MiB per-file Git limit. The local path is also added to `.git/info/exclude` so subsequent syncs do not repeatedly stage it.
-
-`.gitignore` additionally excludes data that should not belong to the source repository, including:
-
-- `node_modules`, Rust `target`, frontend/build caches and generated Tauri output
-- local cognition/runtime data, logs, SQLite/Lance databases and dumps
-- model weights such as GGUF, ONNX, SafeTensors, checkpoints and PyTorch/HDF5 weights
-- generated archives, disk images and installer packages such as ZIP, 7z, RAR, ISO, VHD/VHDX, MSI/MSIX and APPX bundles
-- secrets and private key material
-
-These exclusions are intentional: the online repository is an exact mirror of the **versionable OS source tree**, not of machine-local runtime state, downloaded models or generated build artifacts.
-
-The upload first fetches `origin/main` and creates its mirror commit with that exact remote commit as parent. If the remote changes before push, Git rejects the update rather than silently overwriting a newer remote change. No rebase or merge is used to reintroduce old online files.
-
-Both commands require Git for Windows and valid GitHub credentials for this private repository. The download command is destructive to the old local repository after the fresh clone has been verified; the upload command is destructive to files in the current online tree that are absent from the clean local source tree.
-
-## Start
-
-Prerequisites: current stable Rust, Node.js, pnpm, Tauri platform prerequisites.
+After prerequisites are installed:
 
 ```bash
-pnpm install
+pnpm install --no-frozen-lockfile
 pnpm dev
 ```
 
-Rust workspace check:
+Release executable without bundling:
+
+```bash
+pnpm build:app
+```
+
+Workspace validation:
 
 ```bash
 cargo check --workspace
+pnpm typecheck
+cargo run -p os-cli -- doctor
 ```
 
-Full repository validation:
+## CI and release validation
 
-```bash
-pnpm check
-```
+Core CI validates:
 
-## CI validation
+- Rust formatting, tests, Clippy, CLI doctor and developer diagnostics
+- TypeScript workspace typecheck
+- production frontend build
+- Windows PowerShell bootstrap syntax
+- a real Windows Tauri release executable
 
-GitHub Actions validates:
+The Windows job uploads `target/release/os-desktop.exe` as a workflow artifact.
 
-- Rust formatting, core tests and Clippy on Ubuntu
-- TypeScript type checking and the production frontend build
-- Windows desktop compilation for the real Tauri application
-- Protocol Buffers compiler availability for Lance/DataFusion dependencies
+`Windows Release Package` can be started manually or by a `v*` tag. It produces both the release executable and an NSIS installer artifact.
 
 ## Status
 
-This repository was intentionally reset to a clean commercial-grade architecture on 2026-08-27. Previous implementation history is preserved on `legacy-before-greenfield-2026-08-27`.
+The source tree was reset to a clean greenfield architecture on 2026-08-27; the previous implementation is preserved on `legacy-before-greenfield-2026-08-27`.
 
-The Spatial OS architecture is now the target architecture for continued development.
+The current launch target is the validated Black-Gold Phase-4 desktop. Higher GPU phases remain isolated until they pass the same production gates.
