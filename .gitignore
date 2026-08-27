@@ -1,46 +1,14 @@
 # OS - Git Ignore
+# Ziel: Alle OS-Projektdateien versionieren. Nur lokale Secrets bleiben ausgeschlossen.
 
-# System
-Cache/
-Logs/
-node_modules/
-*.log
+# Secrets / lokale Zugangsdaten
 .env
-.DS_Store
-Thumbs.db
-
-# Obsidian Data (runtime)
-Data/Obsidian/
-
-# Runtime Data
-Data/Evolution/
-Data/Memory/
-Data/KnowledgeGraph/
-
-# Electron Binaries
-*.exe
-*.dll
-*.bin
-*.dat
-*.pak
-*.asar
-*.com
-
-# Obsidian Binaries
-Obsidian/
-
-# Electron Config
-LICENSES.chromium.html
-LICENSE.electron.txt
-version
-vk_swiftshader_icd.json
-resources/app/
-
-# Root Config
-.obsidian/
-AI-Brain/.obsidian/
-
-# Build
-resources.pak
-snapshot_blob.bin
+.env.local
+.env.*.local
 Docs/FREE-API-KEYS.md
+credentials.json
+secrets.json
+*.pem
+*.p12
+*.pfx
+*.key
