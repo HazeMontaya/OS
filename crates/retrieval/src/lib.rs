@@ -64,17 +64,24 @@ impl RetrievalEngine {
         query: &str,
         limit: usize,
     ) -> StorageResult<Vec<RecallHit>> {
-        let ids = storage.search_event_ids(query, limit)?;
-        let total = ids.len().max(1) as f32;
-        Ok(ids
-            .into_iter()
-            .enumerate()
-            .map(|(index, id)| RecallHit {
-                id,
-                score: 1.0 - (index as f32 / total) * 0.25,
-                source: "fts5:event",
-            })
-            .collect())
+        let Some(query) = safe_fts_query(query) else {
+            return Ok(Vec::new());
+        };
+        let ids = storage.search_event_ids(&query, limit)?;
+        Ok(score_ranked(ids, "fts5:event"))
+    }
+
+    pub fn lexical_memory_recall(
+        &self,
+        storage: &Storage,
+        query: &str,
+        limit: usize,
+    ) -> StorageResult<Vec<RecallHit>> {
+        let Some(query) = safe_fts_query(query) else {
+            return Ok(Vec::new());
+        };
+        let ids = storage.search_memory_ids(&query, limit)?;
+        Ok(score_ranked(ids, "fts5:memory"))
     }
 
     pub fn rank(&self, mut signals: Vec<RetrievalSignal>) -> Vec<RecallHit> {
@@ -93,9 +100,40 @@ impl RetrievalEngine {
     }
 }
 
+fn score_ranked(ids: Vec<String>, source: &'static str) -> Vec<RecallHit> {
+    let total = ids.len().max(1) as f32;
+    ids.into_iter()
+        .enumerate()
+        .map(|(index, id)| RecallHit {
+            id,
+            score: 1.0 - (index as f32 / total) * 0.25,
+            source,
+        })
+        .collect()
+}
+
+fn safe_fts_query(raw: &str) -> Option<String> {
+    let terms = raw
+        .split_whitespace()
+        .map(|term| {
+            term.trim_matches(|character: char| {
+                !character.is_alphanumeric() && character != '_' && character != '-'
+            })
+        })
+        .filter(|term| !term.is_empty())
+        .take(16)
+        .map(|term| format!("\"{}\"", term.replace('"', "\"\"")))
+        .collect::<Vec<_>>();
+
+    (!terms.is_empty()).then(|| terms.join(" AND "))
+}
+
 #[cfg(test)]
 mod tests {
-    use super::{FusionWeights, RetrievalEngine, RetrievalSignal};
+    use os_contracts::{MemoryKind, MemoryRecord};
+    use os_storage::Storage;
+
+    use super::{safe_fts_query, FusionWeights, RetrievalEngine, RetrievalSignal};
 
     #[test]
     fn fusion_prefers_stronger_combined_evidence() {
@@ -119,5 +157,37 @@ mod tests {
             },
         ]);
         assert_eq!(ranked[0].id, "strong");
+    }
+
+    #[test]
+    fn arbitrary_input_is_converted_to_literal_fts_terms() {
+        assert_eq!(
+            safe_fts_query("hello OR (world*)").as_deref(),
+            Some("\"hello\" AND \"OR\" AND \"world\"")
+        );
+        assert!(safe_fts_query("***").is_none());
+    }
+
+    #[test]
+    fn memory_recall_uses_safe_literal_query() {
+        let mut storage = Storage::in_memory().expect("storage");
+        storage
+            .upsert_memory(&MemoryRecord {
+                id: "memory-1".into(),
+                kind: MemoryKind::Semantic,
+                text: "temporal knowledge graph".into(),
+                relevance: 0.9,
+                confidence: 1.0,
+                first_seen_ms: 1,
+                last_confirmed_ms: 1,
+                provenance: vec!["event-1".into()],
+            })
+            .expect("memory");
+
+        let hits = RetrievalEngine::default()
+            .lexical_memory_recall(&storage, "temporal graph", 5)
+            .expect("recall");
+        assert_eq!(hits.len(), 1);
+        assert_eq!(hits[0].id, "memory-1");
     }
 }
