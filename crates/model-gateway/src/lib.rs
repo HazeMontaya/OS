@@ -118,6 +118,19 @@ pub struct ModelCompletion {
     pub completion_tokens: Option<u64>,
 }
 
+#[derive(Debug, Clone, PartialEq)]
+pub struct EmbeddingVector {
+    pub index: usize,
+    pub values: Vec<f32>,
+}
+
+#[derive(Debug, Clone)]
+pub struct EmbeddingResult {
+    pub model: String,
+    pub vectors: Vec<EmbeddingVector>,
+    pub prompt_tokens: Option<u64>,
+}
+
 #[derive(Debug, Error)]
 pub enum ModelGatewayError {
     #[error("failed to build HTTP client: {0}")]
@@ -128,6 +141,8 @@ pub enum ModelGatewayError {
     NoModels,
     #[error("model server returned no assistant text")]
     EmptyResponse,
+    #[error("embedding server returned no vector")]
+    EmptyEmbedding,
 }
 
 #[derive(Clone)]
@@ -170,16 +185,7 @@ impl LlamaCppClient {
         max_tokens: u32,
         temperature: f32,
     ) -> Result<ModelCompletion, ModelGatewayError> {
-        let model = if self.config.model.trim().is_empty() {
-            self.models()
-                .await?
-                .into_iter()
-                .next()
-                .ok_or(ModelGatewayError::NoModels)?
-        } else {
-            self.config.model.clone()
-        };
-
+        let model = self.resolve_model().await?;
         self.chat_with_model(&model, messages, max_tokens, temperature)
             .await
     }
@@ -228,6 +234,65 @@ impl LlamaCppClient {
         })
     }
 
+    pub async fn embed(&self, input: &str) -> Result<EmbeddingVector, ModelGatewayError> {
+        let result = self.embed_many(&[input]).await?;
+        result
+            .vectors
+            .into_iter()
+            .next()
+            .ok_or(ModelGatewayError::EmptyEmbedding)
+    }
+
+    pub async fn embed_many(&self, inputs: &[&str]) -> Result<EmbeddingResult, ModelGatewayError> {
+        if inputs.is_empty() {
+            return Err(ModelGatewayError::EmptyEmbedding);
+        }
+        let model = self.resolve_model().await?;
+        let body = EmbeddingRequest {
+            input: inputs,
+            model: &model,
+            encoding_format: "float",
+        };
+        let mut response = self
+            .authorize(self.client.post(self.endpoint("/v1/embeddings")))
+            .json(&body)
+            .send()
+            .await?
+            .error_for_status()?
+            .json::<EmbeddingResponse>()
+            .await?;
+        response.data.sort_by_key(|item| item.index);
+        let vectors = response
+            .data
+            .into_iter()
+            .map(|item| EmbeddingVector {
+                index: item.index,
+                values: item.embedding,
+            })
+            .collect::<Vec<_>>();
+        if vectors.is_empty() || vectors.iter().any(|vector| vector.values.is_empty()) {
+            return Err(ModelGatewayError::EmptyEmbedding);
+        }
+
+        Ok(EmbeddingResult {
+            model: response.model.unwrap_or(model),
+            vectors,
+            prompt_tokens: response.usage.and_then(|usage| usage.prompt_tokens),
+        })
+    }
+
+    async fn resolve_model(&self) -> Result<String, ModelGatewayError> {
+        if self.config.model.trim().is_empty() {
+            self.models()
+                .await?
+                .into_iter()
+                .next()
+                .ok_or(ModelGatewayError::NoModels)
+        } else {
+            Ok(self.config.model.clone())
+        }
+    }
+
     fn authorize(&self, request: RequestBuilder) -> RequestBuilder {
         match self.config.api_key.as_deref() {
             Some(api_key) if !api_key.is_empty() => request.bearer_auth(api_key),
@@ -249,11 +314,31 @@ struct ChatCompletionRequest<'a> {
     stream: bool,
 }
 
+#[derive(Serialize)]
+struct EmbeddingRequest<'a> {
+    input: &'a [&'a str],
+    model: &'a str,
+    encoding_format: &'static str,
+}
+
 #[derive(Deserialize)]
 struct ChatCompletionResponse {
     model: Option<String>,
     choices: Vec<ChatChoice>,
     usage: Option<Usage>,
+}
+
+#[derive(Deserialize)]
+struct EmbeddingResponse {
+    model: Option<String>,
+    data: Vec<EmbeddingData>,
+    usage: Option<Usage>,
+}
+
+#[derive(Deserialize)]
+struct EmbeddingData {
+    index: usize,
+    embedding: Vec<f32>,
 }
 
 #[derive(Deserialize)]
@@ -302,7 +387,10 @@ fn extract_text(content: &Value) -> Option<String> {
 
 #[cfg(test)]
 mod tests {
-    use super::{LlamaCppClient, ModelDescriptor, ModelKind, ModelRegistry, extract_text};
+    use super::{
+        EmbeddingData, EmbeddingResponse, LlamaCppClient, ModelDescriptor, ModelKind, ModelRegistry,
+        extract_text,
+    };
     use serde_json::json;
 
     #[test]
@@ -340,7 +428,24 @@ mod tests {
             client.endpoint("/v1/models"),
             "http://127.0.0.1:8080/v1/models"
         );
+        assert_eq!(
+            client.endpoint("/v1/embeddings"),
+            "http://127.0.0.1:8080/v1/embeddings"
+        );
         assert_eq!(client.configured_model(), "");
+    }
+
+    #[test]
+    fn embedding_payload_supports_dense_float_vectors() {
+        let response = EmbeddingResponse {
+            model: Some("embed-test".into()),
+            data: vec![EmbeddingData {
+                index: 0,
+                embedding: vec![0.1, 0.2, 0.3],
+            }],
+            usage: None,
+        };
+        assert_eq!(response.data[0].embedding.len(), 3);
     }
 
     #[test]
