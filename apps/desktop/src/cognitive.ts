@@ -29,6 +29,18 @@ export type AskResult = {
   context: ContextPack;
 };
 
+export type CognitiveActivityPhase =
+  | "memory_recall"
+  | "model_inference"
+  | "output_persist";
+
+export type CognitiveActivity = {
+  phase: CognitiveActivityPhase;
+  active: boolean;
+  success: boolean | null;
+  component: string;
+};
+
 export type CognitiveNode = {
   id: string;
   kind: string;
