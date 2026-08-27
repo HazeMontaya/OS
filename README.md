@@ -51,12 +51,16 @@ Core rules: the kernel must remain headless-capable; the renderer must not own c
 
 The canonical local working directory is `S:\OS` and the canonical remote is `https://github.com/HazeMontaya/OS.git` on branch `main`.
 
-Two root-level Windows command files provide explicit one-direction synchronization:
+The two root-level command files use **source-wins mirror semantics**. The selected source always replaces and cleans the destination repository state.
 
-- `GIT-DOWNLOAD-ONLINE-NACH-S-OS.cmd` — clones the repository when `S:\OS` does not exist; otherwise stashes uncommitted local changes, fetches GitHub and resets local `main` to `origin/main`. Existing local work is protected in a Git stash before the reset.
-- `GIT-UPLOAD-S-OS-NACH-ONLINE.cmd` — stages and commits local changes from `S:\OS`, fetches the current online `main`, rebases without force-pushing, and pushes only when the rebase succeeds without conflicts.
+- `GIT-DOWNLOAD-ONLINE-NACH-S-OS.cmd` — GitHub `origin/main` is authoritative. The command fetches the current online branch, resets local `S:\OS` hard to that commit and runs `git clean -ffdx`, removing local tracked changes, untracked files and ignored build/output files that are not part of the online repository. Submodules are also reset and cleaned.
+- `GIT-UPLOAD-S-OS-NACH-ONLINE.cmd` — local `S:\OS` is authoritative. The command stages all tracked changes and deletions, creates a sync commit when required, fetches the current remote SHA and replaces `origin/main` with the local Git state using `--force-with-lease`. There is no rebase or merge with the old online content.
 
-Both commands require Git for Windows and valid GitHub credentials for this private repository. Neither command uses `git push --force`.
+**Important:** these are intentionally destructive mirror operations. Download discards local repository differences. Upload replaces the remote `main` history/content with the local `main` state. `--force-with-lease` is used instead of blind `--force` so a remote change made after the script's fetch is not silently overwritten.
+
+Files excluded by `.gitignore` are not uploaded because Git does not track them.
+
+Both commands require Git for Windows and valid GitHub credentials for this private repository.
 
 ## Start
 
