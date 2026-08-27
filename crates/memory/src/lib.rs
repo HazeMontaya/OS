@@ -77,15 +77,13 @@ pub fn adaptive_memory_score(signals: MemorySignals) -> f32 {
     let correction_penalty = (signals.correction_count as f32 / 8.0).clamp(0.0, 0.6);
     let recency = 1.0 / (1.0 + (signals.age_days.max(0.0) / 30.0));
 
-    (
-        signals.relevance.clamp(0.0, 1.0) * 0.25
-            + signals.confidence.clamp(0.0, 1.0) * 0.20
-            + usage * 0.15
-            + success * 0.15
-            + recency * 0.15
-            + signals.relationship_strength.clamp(0.0, 1.0) * 0.10
-            - correction_penalty
-    )
+    (signals.relevance.clamp(0.0, 1.0) * 0.25
+        + signals.confidence.clamp(0.0, 1.0) * 0.20
+        + usage * 0.15
+        + success * 0.15
+        + recency * 0.15
+        + signals.relationship_strength.clamp(0.0, 1.0) * 0.10
+        - correction_penalty)
         .clamp(0.0, 1.0)
 }
 
@@ -159,7 +157,7 @@ fn contains_any(value: &str, needles: &[&str]) -> bool {
 mod tests {
     use os_contracts::{MemoryKind, Sensitivity};
 
-    use super::{adaptive_memory_score, MemoryCompileInput, MemoryCompiler, MemorySignals};
+    use super::{MemoryCompileInput, MemoryCompiler, MemorySignals, adaptive_memory_score};
 
     #[test]
     fn compiler_promotes_explicit_long_term_rules() {
