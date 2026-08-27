@@ -7,10 +7,14 @@
 *.p12
 *.pfx
 
-# JS
+# JS / frontend caches
 node_modules/
 dist/
 .pnpm-store/
+.cache/
+.vite/
+.turbo/
+*.tsbuildinfo
 
 # Rust
 /target/
@@ -24,6 +28,7 @@ dist/
 .idea/
 .DS_Store
 Thumbs.db
+desktop.ini
 
 # runtime data: never commit user cognition or credentials
 Data/
@@ -33,13 +38,23 @@ runtime/
 Logs/
 logs/
 *.log
+*.dmp
+*.dump
 
-# models / generated artifacts
+# local sync diagnostics
+.os-sync-excluded-local.txt
+
+# models / generated ML artifacts
 Models/
 models/
 *.gguf
 *.onnx
 *.safetensors
+*.ckpt
+*.pt
+*.pth
+*.h5
+*.hdf5
 
 # local databases / vectors
 *.db
@@ -48,6 +63,26 @@ models/
 *.sqlite
 *.sqlite3
 *.lance/
+
+# generated archives / disk images / installers
+Artifacts/
+artifacts/
+Downloads/
+downloads/
+*.zip
+*.7z
+*.rar
+*.tar
+*.tar.gz
+*.tgz
+*.iso
+*.img
+*.vhd
+*.vhdx
+*.msi
+*.msix
+*.appx
+*.appxbundle
 
 # test and coverage output
 coverage/
