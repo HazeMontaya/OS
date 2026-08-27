@@ -106,16 +106,10 @@ async fn ask(
         Some(completion_result.is_ok()),
         inference_component,
     );
-    let completion = completion_result
-        .map_err(|error| format!("local model unavailable: {error}"))?;
+    let completion =
+        completion_result.map_err(|error| format!("local model unavailable: {error}"))?;
 
-    emit_activity(
-        &app,
-        "output_persist",
-        true,
-        None,
-        completion.model.clone(),
-    );
+    emit_activity(&app, "output_persist", true, None, completion.model.clone());
     let output_result = {
         let mut kernel = state
             .kernel
