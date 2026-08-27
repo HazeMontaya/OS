@@ -11,6 +11,7 @@ os-memory = { path = "../memory" }
 os-knowledge-graph = { path = "../knowledge-graph" }
 os-storage = { path = "../storage" }
 os-retrieval = { path = "../retrieval" }
+os-privacy = { path = "../privacy" }
 os-telemetry = { path = "../telemetry" }
 serde_json.workspace = true
 thiserror.workspace = true
