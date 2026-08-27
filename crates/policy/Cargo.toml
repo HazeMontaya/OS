@@ -1,0 +1,5 @@
+[package]
+name = "os-policy"
+version.workspace = true
+edition.workspace = true
+publish = false
