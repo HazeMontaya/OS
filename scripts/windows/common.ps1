@@ -43,6 +43,7 @@ function Refresh-OsPath {
     }
 
     Add-PathEntry (Join-Path $env:USERPROFILE ".cargo\bin")
+    Add-PathEntry (Join-Path $env:LOCALAPPDATA "Microsoft\WindowsApps")
     $repo = Get-OsRepoRoot
     Add-PathEntry (Join-Path $repo ".tools\protoc\bin")
 }
@@ -63,6 +64,156 @@ function Invoke-OsNative {
     }
 }
 
+function Get-WingetExecutable {
+    Refresh-OsPath
+
+    $command = Get-Command "winget.exe" -ErrorAction SilentlyContinue
+    if ($null -ne $command -and -not [string]::IsNullOrWhiteSpace($command.Source)) {
+        return $command.Source
+    }
+
+    try {
+        $package = Get-AppxPackage -Name "Microsoft.DesktopAppInstaller" -ErrorAction SilentlyContinue |
+            Sort-Object Version -Descending |
+            Select-Object -First 1
+        if ($null -ne $package -and -not [string]::IsNullOrWhiteSpace($package.InstallLocation)) {
+            $candidate = Join-Path $package.InstallLocation "winget.exe"
+            if (Test-Path -LiteralPath $candidate) {
+                return $candidate
+            }
+        }
+    } catch {
+        # AppX discovery is best-effort; the official repair path below remains available.
+    }
+
+    return $null
+}
+
+function Test-WingetAvailable {
+    $winget = Get-WingetExecutable
+    if ([string]::IsNullOrWhiteSpace($winget)) {
+        return $false
+    }
+
+    try {
+        & $winget --version *> $null
+        return $LASTEXITCODE -eq 0
+    } catch {
+        return $false
+    }
+}
+
+function Repair-WingetWithOfficialModule {
+    Write-OsStep "Repairing Windows Package Manager with Microsoft.WinGet.Client ..."
+    [Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12
+
+    $gallery = Get-PSRepository -Name "PSGallery" -ErrorAction SilentlyContinue
+    if ($null -eq $gallery) {
+        Register-PSRepository -Default
+        $gallery = Get-PSRepository -Name "PSGallery" -ErrorAction Stop
+    }
+
+    $previousPolicy = $gallery.InstallationPolicy
+    $changedPolicy = $false
+    try {
+        if ($previousPolicy -ne "Trusted") {
+            Set-PSRepository -Name "PSGallery" -InstallationPolicy Trusted
+            $changedPolicy = $true
+        }
+
+        Install-PackageProvider -Name "NuGet" -Force -Scope CurrentUser | Out-Null
+        Install-Module -Name "Microsoft.WinGet.Client" -Force -Repository "PSGallery" -Scope CurrentUser -AllowClobber
+        Import-Module "Microsoft.WinGet.Client" -Force
+        Repair-WinGetPackageManager -Force -Latest
+    } finally {
+        if ($changedPolicy) {
+            try {
+                Set-PSRepository -Name "PSGallery" -InstallationPolicy $previousPolicy
+            } catch {
+                Write-OsWarn "Could not restore the previous PSGallery trust policy automatically."
+            }
+        }
+    }
+}
+
+function Install-WingetFromOfficialBundle {
+    Write-OsStep "Installing the latest stable Microsoft App Installer bundle ..."
+    [Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12
+
+    $bundle = Join-Path $env:TEMP "Microsoft.DesktopAppInstaller.OS.msixbundle"
+    try {
+        Invoke-WebRequest -Uri "https://aka.ms/getwinget" -UseBasicParsing -OutFile $bundle
+        Add-AppxPackage -Path $bundle -ForceApplicationShutdown -ErrorAction Stop
+    } finally {
+        Remove-Item -LiteralPath $bundle -Force -ErrorAction SilentlyContinue
+    }
+}
+
+function Ensure-Winget {
+    if (Test-WingetAvailable) {
+        $winget = Get-WingetExecutable
+        Write-OsOk ("Windows Package Manager available: " + (& $winget --version))
+        return $winget
+    }
+
+    $osVersion = [Environment]::OSVersion.Version
+    if ($osVersion.Major -lt 10 -or ($osVersion.Major -eq 10 -and $osVersion.Build -lt 17763)) {
+        throw "Windows Package Manager requires Windows 10 version 1809 (build 17763) or newer. Detected build: $($osVersion.Build)."
+    }
+
+    Write-OsWarn "Windows Package Manager is missing or not callable. OS will repair/install it automatically."
+    $repairError = $null
+    try {
+        Repair-WingetWithOfficialModule
+    } catch {
+        $repairError = $_.Exception.Message
+        Write-OsWarn ("Microsoft.WinGet.Client repair path failed: " + $repairError)
+    }
+
+    Refresh-OsPath
+    for ($i = 0; $i -lt 5; $i++) {
+        if (Test-WingetAvailable) {
+            $winget = Get-WingetExecutable
+            Write-OsOk ("Windows Package Manager repaired: " + (& $winget --version))
+            return $winget
+        }
+        Start-Sleep -Seconds 1
+    }
+
+    $bundleError = $null
+    try {
+        Install-WingetFromOfficialBundle
+    } catch {
+        $bundleError = $_.Exception.Message
+        Write-OsWarn ("Direct Microsoft App Installer bundle path failed: " + $bundleError)
+    }
+
+    Refresh-OsPath
+    for ($i = 0; $i -lt 8; $i++) {
+        if (Test-WingetAvailable) {
+            $winget = Get-WingetExecutable
+            Write-OsOk ("Windows Package Manager installed: " + (& $winget --version))
+            return $winget
+        }
+        Start-Sleep -Seconds 1
+    }
+
+    $details = @()
+    if (-not [string]::IsNullOrWhiteSpace($repairError)) { $details += "Repair module: $repairError" }
+    if (-not [string]::IsNullOrWhiteSpace($bundleError)) { $details += "App Installer bundle: $bundleError" }
+    $detailText = if ($details.Count -gt 0) { " Details: " + ($details -join " | ") } else { "" }
+    throw "OS could not bootstrap Windows Package Manager automatically. Open https://aka.ms/getwinget once, install Microsoft App Installer, then rerun OS-SETUP.cmd.$detailText"
+}
+
+function Invoke-Winget {
+    param(
+        [Parameter(ValueFromRemainingArguments = $true)][string[]]$Arguments
+    )
+
+    $winget = Ensure-Winget
+    Invoke-OsNative $winget @Arguments
+}
+
 function Ensure-WingetPackage {
     param(
         [Parameter(Mandatory = $true)][string]$Command,
@@ -76,16 +227,12 @@ function Ensure-WingetPackage {
         return
     }
 
-    if (-not (Test-OsCommand "winget")) {
-        throw "winget is required to install $DisplayName automatically. Install Microsoft App Installer, then run OS-SETUP.cmd again."
-    }
-
     Write-OsStep "Installing $DisplayName ($PackageId) ..."
     $wingetArguments = @(
         "install", "--id", $PackageId, "-e", "--source", "winget",
-        "--accept-source-agreements", "--accept-package-agreements", "--silent"
+        "--accept-source-agreements", "--accept-package-agreements", "--silent", "--disable-interactivity"
     ) + $ExtraArguments
-    Invoke-OsNative "winget" @wingetArguments
+    Invoke-Winget @wingetArguments
     Refresh-OsPath
 
     if (-not (Test-OsCommand $Command)) {
