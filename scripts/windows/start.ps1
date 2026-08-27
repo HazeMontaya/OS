@@ -50,10 +50,10 @@ if (-not $needsBuild -and $null -ne $currentHead) {
 
 if ($needsBuild) {
     Write-OsStep "Release executable is missing or does not match the current source. Rebuilding ..."
+    # build.ps1 uses terminating errors for every failed native command. Do not inspect
+    # LASTEXITCODE here: it can legally contain a value from a command executed inside
+    # the child script even when the script itself completed successfully.
     & (Join-Path $PSScriptRoot "build.ps1") -NoValidation
-    if ($LASTEXITCODE -ne 0) {
-        throw "Automatic release rebuild failed."
-    }
 }
 
 if (-not (Test-Path -LiteralPath $exe)) {

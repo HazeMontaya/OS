@@ -130,10 +130,9 @@ Invoke-OsNative "pnpm" "typecheck"
 
 if (-not $SkipBuild) {
     Write-OsStep "Building and marking the startable Windows release executable ..."
+    # build.ps1 already turns every failed native command into a terminating error.
+    # Rely on that contract instead of inspecting LASTEXITCODE from a nested script.
     & (Join-Path $PSScriptRoot "build.ps1") -NoValidation
-    if ($LASTEXITCODE -ne 0) {
-        throw "Release build failed."
-    }
 }
 
 Write-OsHeader "SETUP COMPLETE"
@@ -145,6 +144,7 @@ Write-Host "Diagnostics:      OS-DOCTOR.cmd" -ForegroundColor Yellow
 Write-Host "Installer build:  OS-BUILD.cmd --installer" -ForegroundColor Yellow
 
 if ($Launch) {
+    # start.ps1 also uses terminating errors. If it returns, startup was accepted.
     & (Join-Path $PSScriptRoot "start.ps1")
-    exit $LASTEXITCODE
+    exit 0
 }
