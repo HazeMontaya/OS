@@ -1,0 +1,153 @@
+param(
+    [switch]$SkipModels,
+    [switch]$SkipBuild,
+    [switch]$Launch
+)
+
+. (Join-Path $PSScriptRoot "common.ps1")
+
+$repo = Get-OsRepoRoot
+Set-Location $repo
+Refresh-OsPath
+Write-OsHeader "AUTOMATIC WINDOWS SETUP"
+
+if ([Environment]::OSVersion.Platform -ne [PlatformID]::Win32NT) {
+    throw "OS-SETUP.cmd is intended for Windows."
+}
+
+if (-not (Test-OsCommand "winget")) {
+    throw "Windows Package Manager (winget) is missing. Install/repair Microsoft App Installer and run OS-SETUP.cmd again."
+}
+
+Write-OsStep "Checking source/build toolchain ..."
+Ensure-WingetPackage -Command "git" -PackageId "Git.Git" -DisplayName "Git for Windows"
+Ensure-WingetPackage -Command "node" -PackageId "OpenJS.NodeJS.LTS" -DisplayName "Node.js LTS"
+Ensure-WingetPackage -Command "rustup" -PackageId "Rustlang.Rustup" -DisplayName "Rustup"
+Refresh-OsPath
+
+if (-not (Test-MsvcBuildTools)) {
+    Write-OsStep "Installing Microsoft C++ Build Tools for Tauri/Rust ..."
+    $vsArgs = @(
+        "install", "--id", "Microsoft.VisualStudio.2022.BuildTools", "-e", "--source", "winget",
+        "--accept-source-agreements", "--accept-package-agreements", "--silent",
+        "--override", "--wait --passive --norestart --add Microsoft.VisualStudio.Workload.VCTools --includeRecommended"
+    )
+    Invoke-OsNative "winget" @vsArgs
+    if (-not (Test-MsvcBuildTools)) {
+        Write-OsWarn "Visual Studio Build Tools installation finished but VC tools are not visible yet. A Windows restart may be required before the first build."
+    } else {
+        Write-OsOk "Microsoft C++ Build Tools available."
+    }
+} else {
+    Write-OsOk "Microsoft C++ Build Tools available."
+}
+
+if (-not (Test-WebView2Runtime)) {
+    Write-OsStep "Installing Microsoft Edge WebView2 Runtime ..."
+    $bootstrapper = Join-Path $env:TEMP "MicrosoftEdgeWebview2Setup.exe"
+    Invoke-WebRequest -Uri "https://go.microsoft.com/fwlink/p/?LinkId=2124703" -UseBasicParsing -OutFile $bootstrapper
+    $process = Start-Process -FilePath $bootstrapper -ArgumentList "/silent", "/install" -Wait -PassThru
+    Remove-Item -LiteralPath $bootstrapper -Force -ErrorAction SilentlyContinue
+    if ($process.ExitCode -ne 0 -and $process.ExitCode -ne 3010) {
+        throw "WebView2 installer failed with exit code $($process.ExitCode)."
+    }
+} else {
+    Write-OsOk "Microsoft Edge WebView2 Runtime available."
+}
+
+Write-OsStep "Configuring Rust MSVC toolchain ..."
+Refresh-OsPath
+if (-not (Test-OsCommand "rustup")) {
+    throw "rustup is not available after installation. Open a new terminal or reboot, then run OS-SETUP.cmd again."
+}
+Invoke-OsNative "rustup" "default" "stable-msvc"
+Invoke-OsNative "rustup" "component" "add" "rustfmt" "clippy"
+
+if (-not (Test-OsCommand "npm")) {
+    throw "npm is unavailable after Node.js installation. Open a new terminal or reboot, then run OS-SETUP.cmd again."
+}
+if (-not (Test-OsCommand "pnpm")) {
+    Write-OsStep "Installing pnpm 10 ..."
+    Invoke-OsNative "npm" "install" "--global" "pnpm@10"
+    Refresh-OsPath
+}
+if (-not (Test-OsCommand "pnpm")) {
+    throw "pnpm could not be activated."
+}
+Write-OsOk ("pnpm " + (& pnpm --version))
+
+Write-OsStep "Ensuring Protocol Buffers compiler ..."
+$protocRoot = Join-Path $repo ".tools\protoc"
+if (-not (Test-OsCommand "protoc")) {
+    [Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12
+    $headers = @{ "User-Agent" = "OS-Windows-Bootstrap" }
+    $release = Invoke-RestMethod -Uri "https://api.github.com/repos/protocolbuffers/protobuf/releases/latest" -Headers $headers
+    $asset = $release.assets | Where-Object { $_.name -match '^protoc-.*-win64\.zip$' } | Select-Object -First 1
+    if ($null -eq $asset) {
+        throw "Could not locate a current protoc win64 release asset."
+    }
+    $zip = Join-Path $env:TEMP $asset.name
+    Write-OsStep ("Downloading " + $asset.name + " ...")
+    Invoke-WebRequest -Uri $asset.browser_download_url -Headers $headers -UseBasicParsing -OutFile $zip
+    if (Test-Path -LiteralPath $protocRoot) {
+        Remove-Item -LiteralPath $protocRoot -Recurse -Force
+    }
+    New-Item -ItemType Directory -Path $protocRoot -Force | Out-Null
+    Expand-Archive -LiteralPath $zip -DestinationPath $protocRoot -Force
+    Remove-Item -LiteralPath $zip -Force -ErrorAction SilentlyContinue
+    Add-PathEntry (Join-Path $protocRoot "bin")
+}
+if (-not (Test-OsCommand "protoc")) {
+    throw "protoc is still unavailable after bootstrap."
+}
+Write-OsOk ("protoc " + (& protoc --version))
+
+Write-OsStep "Preparing local-first AI runtime ..."
+Ensure-WingetPackage -Command "ollama" -PackageId "Ollama.Ollama" -DisplayName "Ollama"
+Refresh-OsPath
+Set-OsRuntimeDefaults
+if (-not (Ensure-OllamaServer)) {
+    throw "Ollama is installed but the local API did not become reachable on http://127.0.0.1:11434."
+}
+Write-OsOk "Ollama local API online."
+
+if (-not $SkipModels) {
+    Write-OsStep "Ensuring local chat model llama3.2:3b ..."
+    Invoke-OsNative "ollama" "pull" "llama3.2:3b"
+    Write-OsStep "Ensuring local embedding model nomic-embed-text ..."
+    Invoke-OsNative "ollama" "pull" "nomic-embed-text"
+}
+
+Write-OsStep "Installing JavaScript workspace dependencies ..."
+Invoke-OsNative "pnpm" "install" "--no-frozen-lockfile"
+
+Write-OsStep "Running OS core doctor ..."
+Invoke-OsNative "cargo" "run" "-p" "os-cli" "--" "doctor"
+
+Write-OsStep "Validating Rust workspace ..."
+Invoke-OsNative "cargo" "check" "--workspace"
+Write-OsStep "Validating TypeScript workspace ..."
+Invoke-OsNative "pnpm" "typecheck"
+
+if (-not $SkipBuild) {
+    Write-OsStep "Building startable Windows release executable ..."
+    Invoke-OsNative "pnpm" "--filter" "@os/desktop" "tauri" "build" "--no-bundle"
+    $exe = Get-ReleaseExecutablePath
+    if (-not (Test-Path -LiteralPath $exe)) {
+        throw "Tauri build completed but the expected release executable was not found at $exe."
+    }
+    Write-OsOk "Release executable: $exe"
+}
+
+Write-OsHeader "SETUP COMPLETE"
+Write-Host "OS is configured for a local Ollama runtime." -ForegroundColor White
+Write-Host "Chat model:      $env:OS_LLAMA_MODEL" -ForegroundColor DarkYellow
+Write-Host "Embedding model: $env:OS_EMBED_MODEL" -ForegroundColor DarkYellow
+Write-Host "Start:            OS-START.cmd" -ForegroundColor Yellow
+Write-Host "Diagnostics:      OS-DOCTOR.cmd" -ForegroundColor Yellow
+Write-Host "Installer build:  OS-BUILD.cmd --installer" -ForegroundColor Yellow
+
+if ($Launch) {
+    & (Join-Path $PSScriptRoot "start.ps1")
+    exit $LASTEXITCODE
+}
