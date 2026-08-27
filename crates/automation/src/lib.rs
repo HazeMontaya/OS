@@ -98,7 +98,7 @@ impl AutomationGraph {
 
         let reachable = reachable_from(&triggers, &adjacency);
         for output in &outputs {
-            if !reachable.contains(output.as_str()) {
+            if !reachable.contains(output) {
                 return Err(AutomationError::UnreachableOutput(output.clone()));
             }
         }
@@ -107,24 +107,22 @@ impl AutomationGraph {
             graph_id: self.id,
             triggers,
             outputs,
-            reachable_nodes: reachable.into_iter().map(str::to_owned).collect(),
+            reachable_nodes: reachable.into_iter().collect(),
         })
     }
 }
 
-fn reachable_from<'a>(
-    starts: &'a [String],
-    adjacency: &BTreeMap<&'a str, Vec<&'a str>>,
-) -> BTreeSet<&'a str> {
+fn reachable_from(starts: &[String], adjacency: &BTreeMap<&str, Vec<&str>>) -> BTreeSet<String> {
     let mut seen = BTreeSet::new();
-    let mut queue = starts.iter().map(String::as_str).collect::<VecDeque<_>>();
+    let mut queue = starts.iter().cloned().collect::<VecDeque<_>>();
     while let Some(current) = queue.pop_front() {
-        if !seen.insert(current) {
+        if seen.contains(&current) {
             continue;
         }
-        if let Some(next) = adjacency.get(current) {
-            queue.extend(next.iter().copied());
+        if let Some(next) = adjacency.get(current.as_str()) {
+            queue.extend(next.iter().map(|value| (*value).to_owned()));
         }
+        seen.insert(current);
     }
     seen
 }
