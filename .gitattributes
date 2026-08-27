@@ -1,0 +1,19 @@
+# Text normalization
+* text=auto
+
+# Windows command files must remain directly executable by cmd.exe
+*.cmd text eol=crlf
+*.bat text eol=crlf
+*.ps1 text eol=crlf
+
+# Unix scripts
+*.sh text eol=lf
+
+# Common binary assets
+*.png binary
+*.jpg binary
+*.jpeg binary
+*.webp binary
+*.ico binary
+*.icns binary
+*.pdf binary
