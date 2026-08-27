@@ -1,9 +1,15 @@
 import { FormEvent, useEffect, useState } from "react";
+import type { WorkspaceId } from "@os/protocol";
+import { RENDER_PROFILES } from "@os/renderer";
+import { workspaceById } from "@os/visualization";
 import { invoke } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
 import AnalyticsPanel from "./analytics/AnalyticsPanel";
 import CognitiveVoid from "./CognitiveVoid";
 import NodeInspector from "./inspector/NodeInspector";
+import SettingsPanel from "./settings/SettingsPanel";
+import { useOsSettings } from "./settings/useOsSettings";
+import WorkspaceDock from "./workspaces/WorkspaceDock";
 import {
   AskResult,
   CognitiveActivity,
@@ -16,6 +22,7 @@ import {
 } from "./cognitive";
 
 export default function App() {
+  const { settings, patchSettings, resetSettings } = useOsSettings();
   const [snapshot, setSnapshot] = useState<SystemSnapshot>(emptySystemSnapshot);
   const [graph, setGraph] = useState<GraphSnapshot>(emptyGraph);
   const [input, setInput] = useState("");
@@ -25,7 +32,9 @@ export default function App() {
   const [activityPhase, setActivityPhase] = useState<CognitiveActivityPhase | null>(null);
   const [activityComponent, setActivityComponent] = useState<string | null>(null);
   const [activityHistory, setActivityHistory] = useState<CognitiveActivityRecord[]>([]);
-  const [analyticsOpen, setAnalyticsOpen] = useState(true);
+  const [analyticsOpen, setAnalyticsOpen] = useState(settings.analyticsDefaultOpen);
+  const [settingsOpen, setSettingsOpen] = useState(false);
+  const [activeWorkspaceId, setActiveWorkspaceId] = useState<WorkspaceId>("main");
   const [selectedNodeId, setSelectedNodeId] = useState<string | null>(null);
 
   const refresh = async () => {
@@ -93,6 +102,12 @@ export default function App() {
     }
   };
 
+  const handleWorkspaceChange = (workspace: WorkspaceId) => {
+    setActiveWorkspaceId(workspace);
+    setSettingsOpen(workspace === "settings");
+    if (workspace !== "settings") setSelectedNodeId(null);
+  };
+
   const activePanel = busy || answer !== null || error !== null;
   const livePhaseLabel = activityPhase
     ? activityPhase.replaceAll("_", " ").toUpperCase()
@@ -100,9 +115,15 @@ export default function App() {
   const selectedNode = selectedNodeId
     ? graph.nodes.find((node) => node.id === selectedNodeId) ?? null
     : null;
+  const densityClass = `density-${settings.interfaceDensity.toLowerCase()}`;
+  const activeWorkspace = workspaceById(activeWorkspaceId);
+  const renderProfile = RENDER_PROFILES[settings.renderQuality];
 
   return (
-    <main className={`shell${analyticsOpen ? " analytics-visible" : ""}`}>
+    <main
+      data-workspace={activeWorkspaceId}
+      className={`shell${analyticsOpen ? " analytics-visible" : ""} ${densityClass}${settings.reducedMotion ? " reduced-motion" : ""}`}
+    >
       <CognitiveVoid
         graph={graph}
         activity={snapshot.event_count + (busy ? 1 : 0)}
@@ -111,21 +132,28 @@ export default function App() {
         onSelectNode={(node) => setSelectedNodeId(node?.id ?? null)}
       />
 
+      <WorkspaceDock active={activeWorkspaceId} onChange={handleWorkspaceChange} />
+
       <header className="topbar glass">
         <div>
           <span className="brand-mark" />
           <strong>OS</strong>
-          <span className="muted">cognitive environment</span>
+          <span className="muted">{activeWorkspace.label.toLowerCase()}</span>
         </div>
         <div className="telemetry">
           <span className={snapshot.kernel_online ? "online" : "offline"}>
             {snapshot.kernel_online ? "KERNEL ONLINE" : "WEB PREVIEW"}
           </span>
           {livePhaseLabel && <span className="live-activity">{livePhaseLabel}</span>}
-          <span>{snapshot.event_count} EVENTS</span>
-          <span>{snapshot.memory_count} MEMORIES</span>
-          <span>{snapshot.node_count} NODES</span>
-          <span>{snapshot.edge_count} EDGES</span>
+          {settings.telemetryVisible && (
+            <>
+              <span>{snapshot.event_count} EVENTS</span>
+              <span>{snapshot.memory_count} MEMORIES</span>
+              <span>{snapshot.node_count} NODES</span>
+              <span>{snapshot.edge_count} EDGES</span>
+              <span>{renderProfile.label} · {settings.targetFps} FPS</span>
+            </>
+          )}
           <button
             type="button"
             className={`top-action${analyticsOpen ? " active" : ""}`}
@@ -134,10 +162,18 @@ export default function App() {
           >
             ANALYTICS
           </button>
+          <button
+            type="button"
+            className={`top-action${settingsOpen ? " active" : ""}`}
+            onClick={() => handleWorkspaceChange(settingsOpen ? "main" : "settings")}
+            aria-pressed={settingsOpen}
+          >
+            SETTINGS
+          </button>
         </div>
       </header>
 
-      {analyticsOpen && (
+      {analyticsOpen && !settingsOpen && (
         <AnalyticsPanel
           snapshot={snapshot}
           graph={graph}
@@ -148,7 +184,16 @@ export default function App() {
         />
       )}
 
-      {selectedNode && (
+      {settingsOpen && (
+        <SettingsPanel
+          settings={settings}
+          onChange={patchSettings}
+          onReset={resetSettings}
+          onClose={() => handleWorkspaceChange("main")}
+        />
+      )}
+
+      {selectedNode && !settingsOpen && (
         <NodeInspector
           node={selectedNode}
           graph={graph}
@@ -156,17 +201,15 @@ export default function App() {
         />
       )}
 
-      {!activePanel && (
+      {!activePanel && !settingsOpen && (
         <section className="focus-copy">
-          <p className="eyebrow">ACTIVE CONTEXT</p>
-          <h1>Cognition is the interface.</h1>
-          <p>
-            Memory, knowledge, agents, tools and execution traces become one navigable state model.
-          </p>
+          <p className="eyebrow">{activeWorkspace.shortLabel} · ACTIVE CONTEXT</p>
+          <h1>{activeWorkspace.label}</h1>
+          <p>{activeWorkspace.purpose}. The view remains a projection of canonical OS state.</p>
         </section>
       )}
 
-      {activePanel && (
+      {activePanel && !settingsOpen && (
         <section className="response-panel glass" aria-live="polite">
           <header>
             <span className="eyebrow">COGNITIVE OUTPUT</span>
@@ -203,7 +246,7 @@ export default function App() {
         <input
           value={input}
           onChange={(event) => setInput(event.target.value)}
-          placeholder="Ask, command, search, create…"
+          placeholder={`${activeWorkspace.shortLabel} · Ask, command, search, create…`}
           aria-label="OS command input"
           disabled={busy}
         />

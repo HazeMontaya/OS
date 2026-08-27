@@ -5,7 +5,9 @@
   "scripts": {
     "dev": "pnpm --filter @os/desktop tauri dev",
     "build": "pnpm --filter @os/desktop tauri build",
-    "typecheck": "pnpm --filter @os/desktop typecheck",
+    "typecheck": "pnpm -r --if-present typecheck",
+    "typecheck:desktop": "pnpm --filter @os/desktop typecheck",
+    "test:core": "cargo test --workspace --exclude os-desktop",
     "check": "cargo check --workspace && pnpm typecheck"
   }
 }
