@@ -7,6 +7,7 @@ import {
   AskResult,
   CognitiveActivity,
   CognitiveActivityPhase,
+  CognitiveActivityRecord,
   emptyGraph,
   emptySystemSnapshot,
   GraphSnapshot,
@@ -22,6 +23,7 @@ export default function App() {
   const [error, setError] = useState<string | null>(null);
   const [activityPhase, setActivityPhase] = useState<CognitiveActivityPhase | null>(null);
   const [activityComponent, setActivityComponent] = useState<string | null>(null);
+  const [activityHistory, setActivityHistory] = useState<CognitiveActivityRecord[]>([]);
   const [analyticsOpen, setAnalyticsOpen] = useState(true);
 
   const refresh = async () => {
@@ -46,6 +48,13 @@ export default function App() {
     let unlisten: (() => void) | undefined;
     void listen<CognitiveActivity>("cognitive-activity", (event) => {
       const activity = event.payload;
+      const record: CognitiveActivityRecord = {
+        ...activity,
+        id: crypto.randomUUID(),
+        received_at_ms: Date.now(),
+      };
+      setActivityHistory((current) => [...current, record].slice(-48));
+
       if (activity.active) {
         setActivityPhase(activity.phase);
         setActivityComponent(activity.component);
@@ -127,6 +136,7 @@ export default function App() {
           graph={graph}
           phase={activityPhase}
           busy={busy}
+          activityHistory={activityHistory}
           onClose={() => setAnalyticsOpen(false)}
         />
       )}

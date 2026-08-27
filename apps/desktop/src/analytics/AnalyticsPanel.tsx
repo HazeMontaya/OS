@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import type {
   CognitiveActivityPhase,
+  CognitiveActivityRecord,
   GraphSnapshot,
   SystemSnapshot,
 } from "../cognitive";
@@ -11,6 +12,7 @@ type AnalyticsPanelProps = {
   graph: GraphSnapshot;
   phase: CognitiveActivityPhase | null;
   busy: boolean;
+  activityHistory: CognitiveActivityRecord[];
   onClose: () => void;
 };
 
@@ -30,11 +32,19 @@ function nowLabel() {
   });
 }
 
+function traceStatus(activity: CognitiveActivityRecord) {
+  if (activity.active) return "start";
+  if (activity.success === false) return "failed";
+  if (activity.success === true) return "complete";
+  return "end";
+}
+
 export default function AnalyticsPanel({
   snapshot,
   graph,
   phase,
   busy,
+  activityHistory,
   onClose,
 }: AnalyticsPanelProps) {
   const [samples, setSamples] = useState<RuntimeSample[]>([]);
@@ -71,6 +81,11 @@ export default function AnalyticsPanel({
       .sort((left, right) => right[1] - left[1])
       .slice(0, 8);
   }, [graph]);
+
+  const visibleTrace = useMemo(
+    () => [...activityHistory].reverse().slice(0, 10),
+    [activityHistory],
+  );
 
   const runtimeOption = useMemo<OSChartOption>(
     () => ({
@@ -172,6 +187,41 @@ export default function AnalyticsPanel({
         <div><span>Memory</span><strong>{snapshot.memory_count}</strong></div>
         <div><span>Nodes</span><strong>{snapshot.node_count}</strong></div>
         <div><span>Edges</span><strong>{snapshot.edge_count}</strong></div>
+      </section>
+
+      <section className="analytics-block trace-block">
+        <div className="analytics-block-title">
+          <span>Execution trace</span>
+          <small>{activityHistory.length} received events</small>
+        </div>
+        {visibleTrace.length > 0 ? (
+          <div className="trace-list">
+            {visibleTrace.map((activity) => {
+              const status = traceStatus(activity);
+              return (
+                <div className={`trace-row trace-${status}`} key={activity.id}>
+                  <span className="trace-marker" />
+                  <time>
+                    {new Date(activity.received_at_ms).toLocaleTimeString([], {
+                      hour: "2-digit",
+                      minute: "2-digit",
+                      second: "2-digit",
+                    })}
+                  </time>
+                  <div>
+                    <strong>{activity.phase.replaceAll("_", " ")}</strong>
+                    <small>{activity.component}</small>
+                  </div>
+                  <span className="trace-state">{status}</span>
+                </div>
+              );
+            })}
+          </div>
+        ) : (
+          <div className="analytics-empty trace-empty">
+            Execution events appear here when the cognitive runtime becomes active.
+          </div>
+        )}
       </section>
 
       <section className="analytics-block">
