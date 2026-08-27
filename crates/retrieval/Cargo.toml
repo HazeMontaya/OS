@@ -1,0 +1,8 @@
+[package]
+name = "os-retrieval"
+version.workspace = true
+edition.workspace = true
+publish = false
+
+[dependencies]
+os-storage = { path = "../storage" }
