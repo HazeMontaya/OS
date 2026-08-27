@@ -1,0 +1,224 @@
+.node-inspector {
+  position: absolute;
+  z-index: 4;
+  left: 28px;
+  top: 92px;
+  width: min(340px, calc(100vw - 56px));
+  max-height: calc(100vh - 204px);
+  border-radius: 22px;
+  padding: 17px;
+  overflow: auto;
+  scrollbar-width: thin;
+  scrollbar-color: rgba(105, 186, 255, 0.2) transparent;
+}
+
+.node-inspector::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  border-radius: inherit;
+  background:
+    radial-gradient(circle at 0% 0%, rgba(105, 196, 255, 0.11), transparent 36%),
+    linear-gradient(180deg, rgba(92, 159, 224, 0.035), transparent 28%);
+}
+
+.node-inspector > * {
+  position: relative;
+}
+
+.node-inspector-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 14px;
+  padding-bottom: 14px;
+  border-bottom: 1px solid rgba(150, 204, 255, 0.08);
+}
+
+.node-inspector-header > div {
+  min-width: 0;
+  display: grid;
+  gap: 5px;
+}
+
+.node-inspector-header strong {
+  overflow: hidden;
+  color: rgba(239, 248, 255, 0.92);
+  font-size: 17px;
+  font-weight: 580;
+  letter-spacing: -0.025em;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.node-inspector-header small {
+  color: rgba(202, 227, 250, 0.36);
+  font-size: 8px;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+}
+
+.node-score-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 7px;
+  margin: 13px 0;
+}
+
+.node-score-grid > div {
+  padding: 10px;
+  border: 1px solid rgba(144, 203, 255, 0.08);
+  border-radius: 12px;
+  background: rgba(95, 163, 224, 0.035);
+}
+
+.node-score-grid span,
+.node-score-grid strong {
+  display: block;
+}
+
+.node-score-grid span {
+  color: rgba(207, 229, 250, 0.34);
+  font-size: 8px;
+  letter-spacing: 0.09em;
+  text-transform: uppercase;
+}
+
+.node-score-grid strong {
+  margin-top: 5px;
+  color: rgba(237, 248, 255, 0.84);
+  font-size: 17px;
+  font-weight: 540;
+}
+
+.node-relations {
+  padding: 11px 10px 9px;
+  border: 1px solid rgba(143, 202, 255, 0.08);
+  border-radius: 15px;
+  background: rgba(3, 10, 18, 0.32);
+}
+
+.node-section-title {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 0 3px 8px;
+}
+
+.node-section-title span {
+  color: rgba(232, 244, 255, 0.66);
+  font-size: 10px;
+  letter-spacing: 0.09em;
+  text-transform: uppercase;
+}
+
+.node-section-title small {
+  color: rgba(206, 228, 250, 0.29);
+  font-size: 8px;
+}
+
+.relation-list {
+  display: grid;
+  gap: 3px;
+}
+
+.relation-row {
+  display: grid;
+  grid-template-columns: 18px minmax(0, 1fr) auto auto;
+  align-items: center;
+  gap: 7px;
+  min-height: 36px;
+  padding: 5px 6px;
+  border-radius: 9px;
+  background: rgba(86, 154, 215, 0.025);
+}
+
+.relation-row > div {
+  min-width: 0;
+  display: grid;
+  gap: 2px;
+}
+
+.relation-row strong,
+.relation-row small {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.relation-row strong {
+  color: rgba(224, 240, 255, 0.62);
+  font-size: 8px;
+  font-weight: 580;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+
+.relation-row small {
+  color: rgba(205, 227, 249, 0.31);
+  font-size: 8px;
+}
+
+.relation-direction {
+  color: rgba(113, 208, 255, 0.72);
+  text-align: center;
+}
+
+.relation-in {
+  color: rgba(125, 244, 215, 0.64);
+}
+
+.relation-weight,
+.relation-history {
+  color: rgba(201, 226, 248, 0.33);
+  font-family: ui-monospace, SFMono-Regular, Consolas, monospace;
+  font-size: 8px;
+}
+
+.relation-history {
+  padding: 2px 4px;
+  border: 1px solid rgba(169, 184, 211, 0.08);
+  border-radius: 5px;
+  text-transform: uppercase;
+}
+
+.node-empty {
+  min-height: 74px;
+  display: grid;
+  place-items: center;
+  color: rgba(211, 231, 251, 0.32);
+  font-size: 10px;
+  text-align: center;
+}
+
+.node-inspector-footer {
+  display: grid;
+  gap: 4px;
+  margin-top: 12px;
+  padding: 0 3px;
+}
+
+.node-inspector-footer span {
+  color: rgba(208, 229, 249, 0.28);
+  font-size: 7px;
+  letter-spacing: 0.12em;
+}
+
+.node-inspector-footer code {
+  overflow: hidden;
+  color: rgba(202, 226, 248, 0.38);
+  font-size: 8px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+@media (max-width: 960px) {
+  .node-inspector {
+    left: 14px;
+    top: 82px;
+    width: min(330px, calc(100vw - 28px));
+    max-height: calc(100vh - 176px);
+  }
+}
