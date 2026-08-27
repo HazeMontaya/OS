@@ -388,8 +388,8 @@ fn extract_text(content: &Value) -> Option<String> {
 #[cfg(test)]
 mod tests {
     use super::{
-        EmbeddingData, EmbeddingResponse, LlamaCppClient, ModelDescriptor, ModelKind, ModelRegistry,
-        extract_text,
+        EmbeddingData, EmbeddingResponse, LlamaCppClient, ModelDescriptor, ModelKind,
+        ModelRegistry, extract_text,
     };
     use serde_json::json;
 
