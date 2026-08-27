@@ -9,8 +9,9 @@ type Props = {
 
 export default function WorkspaceDock({ active, onChange }: Props) {
   return (
-    <nav className="workspace-dock glass" aria-label="OS workspaces">
-      {WORKSPACES.map((workspace) => (
+    <nav className="workspace-dock glass" aria-label="OS spatial workspaces">
+      <div className="workspace-rail" aria-hidden="true" />
+      {WORKSPACES.map((workspace, index) => (
         <button
           key={workspace.id}
           type="button"
@@ -19,7 +20,9 @@ export default function WorkspaceDock({ active, onChange }: Props) {
           title={`${workspace.label} — ${workspace.purpose}`}
           aria-pressed={active === workspace.id}
         >
-          <span>{workspace.shortLabel}</span>
+          <span className="workspace-index">{String(index + 1).padStart(2, "0")}</span>
+          <span className="workspace-glyph" aria-hidden="true">{workspace.glyph}</span>
+          <span className="workspace-label">{workspace.shortLabel}</span>
         </button>
       ))}
     </nav>

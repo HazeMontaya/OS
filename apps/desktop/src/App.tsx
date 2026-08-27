@@ -1,25 +1,36 @@
-import { FormEvent, useEffect, useState } from "react";
+import { type CSSProperties, FormEvent, useEffect, useState } from "react";
 import type { WorkspaceId } from "@os/protocol";
+import { getTheme, themeCssVariables } from "@os/design-system";
 import { RENDER_PROFILES } from "@os/renderer";
 import { workspaceById } from "@os/visualization";
 import { invoke } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
 import AnalyticsPanel from "./analytics/AnalyticsPanel";
-import CognitiveVoid from "./CognitiveVoid";
+import OsMark from "./brand/OsMark";
 import NodeInspector from "./inspector/NodeInspector";
+import SpatialRenderer from "./rendering/SpatialRenderer";
 import SettingsPanel from "./settings/SettingsPanel";
 import { useOsSettings } from "./settings/useOsSettings";
 import WorkspaceDock from "./workspaces/WorkspaceDock";
 import {
-  AskResult,
-  CognitiveActivity,
-  CognitiveActivityPhase,
-  CognitiveActivityRecord,
+  type AskResult,
+  type CognitiveActivity,
+  type CognitiveActivityPhase,
+  type CognitiveActivityRecord,
   emptyGraph,
   emptySystemSnapshot,
-  GraphSnapshot,
-  SystemSnapshot,
+  type GraphSnapshot,
+  type SystemSnapshot,
 } from "./cognitive";
+
+function hexToRgba(hex: string, alpha: number) {
+  const normalized = hex.replace("#", "");
+  const value = Number.parseInt(normalized, 16);
+  const r = (value >> 16) & 255;
+  const g = (value >> 8) & 255;
+  const b = value & 255;
+  return `rgba(${r}, ${g}, ${b}, ${Math.max(0, Math.min(1, alpha))})`;
+}
 
 export default function App() {
   const { settings, patchSettings, resetSettings } = useOsSettings();
@@ -64,8 +75,7 @@ export default function App() {
         id: crypto.randomUUID(),
         received_at_ms: Date.now(),
       };
-      setActivityHistory((current) => [...current, record].slice(-48));
-
+      setActivityHistory((current) => [...current, record].slice(-64));
       if (activity.active) {
         setActivityPhase(activity.phase);
         setActivityComponent(activity.component);
@@ -76,7 +86,6 @@ export default function App() {
     }).then((dispose) => {
       unlisten = dispose;
     });
-
     return () => unlisten?.();
   }, []);
 
@@ -105,41 +114,56 @@ export default function App() {
   const handleWorkspaceChange = (workspace: WorkspaceId) => {
     setActiveWorkspaceId(workspace);
     setSettingsOpen(workspace === "settings");
-    if (workspace !== "settings") setSelectedNodeId(null);
+    setSelectedNodeId(null);
   };
 
   const activePanel = busy || answer !== null || error !== null;
-  const livePhaseLabel = activityPhase
-    ? activityPhase.replaceAll("_", " ").toUpperCase()
-    : null;
-  const selectedNode = selectedNodeId
-    ? graph.nodes.find((node) => node.id === selectedNodeId) ?? null
-    : null;
+  const livePhaseLabel = activityPhase ? activityPhase.replaceAll("_", " ").toUpperCase() : null;
+  const selectedNode = selectedNodeId ? graph.nodes.find((node) => node.id === selectedNodeId) ?? null : null;
   const densityClass = `density-${settings.interfaceDensity.toLowerCase()}`;
   const activeWorkspace = workspaceById(activeWorkspaceId);
   const renderProfile = RENDER_PROFILES[settings.renderQuality];
+  const activeTheme = getTheme(settings.themeId);
+  const themeStyle = {
+    ...themeCssVariables(settings.themeId),
+    "--os-glass-top": hexToRgba(activeTheme.surfaceRaised, settings.panelOpacity),
+    "--os-glass-bottom": hexToRgba(activeTheme.canvas, settings.panelOpacity * 0.92),
+    "--os-panel-opacity": String(settings.panelOpacity),
+  } as CSSProperties;
 
   return (
     <main
       data-workspace={activeWorkspaceId}
-      className={`shell${analyticsOpen ? " analytics-visible" : ""} ${densityClass}${settings.reducedMotion ? " reduced-motion" : ""}`}
+      data-theme={settings.themeId}
+      style={themeStyle}
+      className={`shell ${densityClass}${analyticsOpen ? " analytics-visible" : ""}${settings.reducedMotion ? " reduced-motion" : ""}${settings.cinematicGrain ? " cinematic-grain" : ""}`}
     >
-      <CognitiveVoid
+      <SpatialRenderer
         graph={graph}
         activity={snapshot.event_count + (busy ? 1 : 0)}
         phase={activityPhase}
+        workspaceId={activeWorkspaceId}
+        settings={settings}
         selectedNodeId={selectedNodeId}
         onSelectNode={(node) => setSelectedNodeId(node?.id ?? null)}
       />
 
+      <div className="shell-vignette" aria-hidden="true" />
+      <div className="shell-grid" aria-hidden="true" />
+      <div className="shell-scan" aria-hidden="true" />
+
       <WorkspaceDock active={activeWorkspaceId} onChange={handleWorkspaceChange} />
 
       <header className="topbar glass">
-        <div>
-          <span className="brand-mark" />
-          <strong>OS</strong>
-          <span className="muted">{activeWorkspace.label.toLowerCase()}</span>
+        <div className="brand-lockup">
+          <OsMark className="brand-logo" />
+          <div className="brand-copy">
+            <strong>OS</strong>
+            <span>COGNITIVE OPERATING SYSTEM</span>
+          </div>
+          <span className="workspace-crumb">/ {activeWorkspace.shortLabel}</span>
         </div>
+
         <div className="telemetry">
           <span className={snapshot.kernel_online ? "online" : "offline"}>
             {snapshot.kernel_online ? "KERNEL ONLINE" : "WEB PREVIEW"}
@@ -147,29 +171,15 @@ export default function App() {
           {livePhaseLabel && <span className="live-activity">{livePhaseLabel}</span>}
           {settings.telemetryVisible && (
             <>
-              <span>{snapshot.event_count} EVENTS</span>
-              <span>{snapshot.memory_count} MEMORIES</span>
+              <span>{snapshot.event_count} EVT</span>
+              <span>{snapshot.memory_count} MEM</span>
               <span>{snapshot.node_count} NODES</span>
-              <span>{snapshot.edge_count} EDGES</span>
-              <span>{renderProfile.label} · {settings.targetFps} FPS</span>
+              <span>{snapshot.edge_count} REL</span>
+              <span>{renderProfile.label} / {settings.targetFps}</span>
             </>
           )}
-          <button
-            type="button"
-            className={`top-action${analyticsOpen ? " active" : ""}`}
-            onClick={() => setAnalyticsOpen((open) => !open)}
-            aria-pressed={analyticsOpen}
-          >
-            ANALYTICS
-          </button>
-          <button
-            type="button"
-            className={`top-action${settingsOpen ? " active" : ""}`}
-            onClick={() => handleWorkspaceChange(settingsOpen ? "main" : "settings")}
-            aria-pressed={settingsOpen}
-          >
-            SETTINGS
-          </button>
+          <button type="button" className={`top-action${analyticsOpen ? " active" : ""}`} onClick={() => setAnalyticsOpen((open) => !open)} aria-pressed={analyticsOpen}>ANALYTICS</button>
+          <button type="button" className={`top-action${settingsOpen ? " active" : ""}`} onClick={() => handleWorkspaceChange(settingsOpen ? "main" : "settings")} aria-pressed={settingsOpen}>CONFIG</button>
         </div>
       </header>
 
@@ -180,49 +190,48 @@ export default function App() {
           phase={activityPhase}
           busy={busy}
           activityHistory={activityHistory}
+          themeId={settings.themeId}
           onClose={() => setAnalyticsOpen(false)}
         />
       )}
 
       {settingsOpen && (
-        <SettingsPanel
-          settings={settings}
-          onChange={patchSettings}
-          onReset={resetSettings}
-          onClose={() => handleWorkspaceChange("main")}
-        />
+        <SettingsPanel settings={settings} onChange={patchSettings} onReset={resetSettings} onClose={() => handleWorkspaceChange("main")} />
       )}
 
       {selectedNode && !settingsOpen && (
-        <NodeInspector
-          node={selectedNode}
-          graph={graph}
-          onClose={() => setSelectedNodeId(null)}
-        />
+        <NodeInspector node={selectedNode} graph={graph} onClose={() => setSelectedNodeId(null)} />
       )}
 
       {!activePanel && !settingsOpen && (
         <section className="focus-copy">
-          <p className="eyebrow">{activeWorkspace.shortLabel} · ACTIVE CONTEXT</p>
+          <p className="eyebrow">{activeWorkspace.glyph} {activeWorkspace.shortLabel} · {activeWorkspace.preferredCamera}</p>
           <h1>{activeWorkspace.label}</h1>
-          <p>{activeWorkspace.purpose}. The view remains a projection of canonical OS state.</p>
+          <p>{activeWorkspace.purpose}.</p>
+          <div className="focus-rule" aria-hidden="true"><span /><i /><span /></div>
+          <div className="focus-meta">
+            <span>CANONICAL STATE</span>
+            <b>LIVE PROJECTION</b>
+            <span>BLACK / GOLD v2</span>
+          </div>
         </section>
       )}
 
       {activePanel && !settingsOpen && (
         <section className="response-panel glass" aria-live="polite">
           <header>
-            <span className="eyebrow">COGNITIVE OUTPUT</span>
+            <div>
+              <span className="eyebrow">COGNITIVE OUTPUT</span>
+              <strong>{busy ? "ACTIVE INFERENCE" : "RESULT"}</strong>
+            </div>
             <span className="response-meta">
-              {busy
-                ? `${livePhaseLabel ?? "COGNITIVE TURN"}${activityComponent ? ` · ${activityComponent}` : ""}`
-                : answer?.model ?? "MODEL ERROR"}
+              {busy ? `${livePhaseLabel ?? "COGNITIVE TURN"}${activityComponent ? ` · ${activityComponent}` : ""}` : answer?.model ?? "MODEL ERROR"}
             </span>
           </header>
 
           {busy && (
             <div className="thinking-state">
-              <span className="thinking-orbit" />
+              <span className="thinking-orbit"><i /></span>
               <p>{livePhaseLabel ?? "Processing cognition"}…</p>
             </div>
           )}
@@ -233,8 +242,9 @@ export default function App() {
             <>
               <div className="response-text">{answer.text}</div>
               <footer>
-                <span>{answer.context.items.length} recalled memories</span>
-                <span>output persisted to cognition</span>
+                <span>{answer.context.items.length} RECALLED MEMORIES</span>
+                <span>PROVENANCE PRESERVED</span>
+                <span>OUTPUT PERSISTED</span>
               </footer>
             </>
           )}
@@ -242,17 +252,12 @@ export default function App() {
       )}
 
       <form className="command glass" onSubmit={submit}>
-        <span className="prompt">›</span>
-        <input
-          value={input}
-          onChange={(event) => setInput(event.target.value)}
-          placeholder={`${activeWorkspace.shortLabel} · Ask, command, search, create…`}
-          aria-label="OS command input"
-          disabled={busy}
-        />
-        <button type="submit" disabled={busy}>
-          {busy ? "THINKING" : "ENTER"}
-        </button>
+        <span className="command-sigil">⌁</span>
+        <div className="command-field">
+          <span>{activeWorkspace.shortLabel}</span>
+          <input value={input} onChange={(event) => setInput(event.target.value)} placeholder="Ask · command · search · create · orchestrate" aria-label="OS command input" disabled={busy} />
+        </div>
+        <button type="submit" disabled={busy}>{busy ? "PROCESSING" : "EXECUTE"}</button>
       </form>
     </main>
   );
