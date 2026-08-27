@@ -11,6 +11,10 @@
   },
   "dependencies": {
     "@babylonjs/core": "^9.22.2",
+    "@os/design-system": "workspace:*",
+    "@os/protocol": "workspace:*",
+    "@os/renderer": "workspace:*",
+    "@os/visualization": "workspace:*",
     "@tauri-apps/api": "^2.11.1",
     "echarts": "^6.1.0",
     "react": "^19.2.8",
