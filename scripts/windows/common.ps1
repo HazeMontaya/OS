@@ -59,7 +59,7 @@ function Invoke-OsNative {
 
     & $File @Arguments
     if ($LASTEXITCODE -ne 0) {
-        throw "Command failed with exit code $LASTEXITCODE: $File $($Arguments -join ' ')"
+        throw "Command failed with exit code ${LASTEXITCODE}: $File $($Arguments -join ' ')"
     }
 }
 
