@@ -25,7 +25,11 @@ pub struct TraceSignal {
 }
 
 impl TraceSignal {
-    pub fn start(trace_id: impl Into<String>, kind: SignalKind, component: impl Into<String>) -> Self {
+    pub fn start(
+        trace_id: impl Into<String>,
+        kind: SignalKind,
+        component: impl Into<String>,
+    ) -> Self {
         Self {
             id: Uuid::new_v4().to_string(),
             trace_id: trace_id.into(),
