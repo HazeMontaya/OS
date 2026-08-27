@@ -10,11 +10,16 @@ import { Color3, Color4 } from "@babylonjs/core/Maths/math.color";
 import { Vector3 } from "@babylonjs/core/Maths/math.vector";
 import { MeshBuilder } from "@babylonjs/core/Meshes/meshBuilder";
 import { Scene } from "@babylonjs/core/scene";
-import type { CognitiveNode, GraphSnapshot } from "./cognitive";
+import type {
+  CognitiveActivityPhase,
+  CognitiveNode,
+  GraphSnapshot,
+} from "./cognitive";
 
 type CognitiveVoidProps = {
   graph: GraphSnapshot;
   activity: number;
+  phase: CognitiveActivityPhase | null;
 };
 
 const GOLDEN_ANGLE = Math.PI * (3 - Math.sqrt(5));
@@ -30,17 +35,25 @@ function hashUnit(value: string) {
 
 function semanticRadius(kind: string) {
   switch (kind) {
-    case "self_model": return 0;
-    case "actor": return 3.2;
+    case "self_model":
+      return 0;
+    case "actor":
+      return 3.2;
     case "goal":
-    case "project": return 4.5;
-    case "episodic_memory": return 5.8;
+    case "project":
+      return 4.5;
+    case "episodic_memory":
+      return 5.8;
     case "semantic_memory":
-    case "stable_memory": return 7.2;
+    case "stable_memory":
+      return 7.2;
     case "agent":
-    case "model": return 8.2;
-    case "tool": return 9.4;
-    default: return 7.8;
+    case "model":
+      return 8.2;
+    case "tool":
+      return 9.4;
+    default:
+      return 7.8;
   }
 }
 
@@ -58,17 +71,36 @@ function nodePosition(node: CognitiveNode, index: number) {
 
 function nodeEnergy(node: CognitiveNode) {
   switch (node.kind) {
-    case "self_model": return new Color3(0.82, 0.96, 1);
-    case "actor": return new Color3(0.38, 0.84, 1);
-    case "episodic_memory": return new Color3(0.22, 0.58, 0.98);
+    case "self_model":
+      return new Color3(0.82, 0.96, 1);
+    case "actor":
+      return new Color3(0.38, 0.84, 1);
+    case "episodic_memory":
+      return new Color3(0.22, 0.58, 0.98);
     case "semantic_memory":
-    case "stable_memory": return new Color3(0.24, 0.78, 0.88);
-    case "model": return new Color3(0.62, 0.42, 1);
-    case "agent": return new Color3(0.34, 0.86, 0.78);
-    case "tool": return new Color3(0.96, 0.7, 0.28);
-    case "goal": return new Color3(0.96, 0.48, 0.62);
-    default: return new Color3(0.4, 0.66, 0.96);
+    case "stable_memory":
+      return new Color3(0.24, 0.78, 0.88);
+    case "model":
+      return new Color3(0.62, 0.42, 1);
+    case "agent":
+      return new Color3(0.34, 0.86, 0.78);
+    case "tool":
+      return new Color3(0.96, 0.7, 0.28);
+    case "goal":
+      return new Color3(0.96, 0.48, 0.62);
+    default:
+      return new Color3(0.4, 0.66, 0.96);
   }
+}
+
+function participatesInPhase(kind: string, phase: CognitiveActivityPhase | null) {
+  if (!phase) return false;
+  if (phase === "memory_recall") return kind.includes("memory");
+  if (phase === "model_inference") return kind === "self_model" || kind === "model";
+  if (phase === "output_persist") {
+    return kind === "self_model" || kind === "model" || kind === "episodic_memory";
+  }
+  return false;
 }
 
 async function createRenderEngine(canvas: HTMLCanvasElement): Promise<AbstractEngine> {
@@ -177,15 +209,20 @@ function renderGraph(scene: Scene, graph: GraphSnapshot) {
   });
 }
 
-export default function CognitiveVoid({ graph, activity }: CognitiveVoidProps) {
+export default function CognitiveVoid({ graph, activity, phase }: CognitiveVoidProps) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const sceneRef = useRef<Scene | null>(null);
   const activityRef = useRef(activity);
+  const phaseRef = useRef<CognitiveActivityPhase | null>(phase);
   const graphRef = useRef(graph);
 
   useEffect(() => {
     activityRef.current = activity;
   }, [activity]);
+
+  useEffect(() => {
+    phaseRef.current = phase;
+  }, [phase]);
 
   useEffect(() => {
     graphRef.current = graph;
@@ -240,9 +277,17 @@ export default function CognitiveVoid({ graph, activity }: CognitiveVoidProps) {
       scene.onBeforeRenderObservable.add(() => {
         const time = performance.now() * 0.001;
         camera.alpha += 0.000045;
-        const pulse = 1 + Math.sin(time * 2.4 + activityRef.current * 0.31) * 0.04;
-        const self = scene?.getMeshByName("cog-node:self:os");
-        if (self) self.scaling.setAll(pulse);
+        const currentPhase = phaseRef.current;
+        const phaseAmplitude = currentPhase === "model_inference" ? 0.11 : 0.075;
+        const wave = Math.sin(time * (currentPhase ? 5.2 : 2.4) + activityRef.current * 0.31);
+
+        scene?.meshes.forEach((mesh) => {
+          if (!mesh.metadata?.cognitiveNode) return;
+          const kind = String(mesh.metadata.kind ?? "");
+          const active = participatesInPhase(kind, currentPhase);
+          const amplitude = active ? phaseAmplitude : kind === "self_model" ? 0.04 : 0.012;
+          mesh.scaling.setAll(1 + wave * amplitude);
+        });
       });
 
       engine.runRenderLoop(() => scene?.render());
