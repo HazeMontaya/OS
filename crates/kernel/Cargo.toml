@@ -9,5 +9,7 @@ os-contracts = { path = "../contracts" }
 os-event-ledger = { path = "../event-ledger" }
 os-memory = { path = "../memory" }
 os-knowledge-graph = { path = "../knowledge-graph" }
+os-storage = { path = "../storage" }
 serde_json.workspace = true
+thiserror.workspace = true
 uuid.workspace = true
