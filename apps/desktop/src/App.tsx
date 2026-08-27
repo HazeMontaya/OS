@@ -1,6 +1,7 @@
 import { FormEvent, useEffect, useState } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
+import AnalyticsPanel from "./analytics/AnalyticsPanel";
 import CognitiveVoid from "./CognitiveVoid";
 import {
   AskResult,
@@ -21,6 +22,7 @@ export default function App() {
   const [error, setError] = useState<string | null>(null);
   const [activityPhase, setActivityPhase] = useState<CognitiveActivityPhase | null>(null);
   const [activityComponent, setActivityComponent] = useState<string | null>(null);
+  const [analyticsOpen, setAnalyticsOpen] = useState(true);
 
   const refresh = async () => {
     try {
@@ -86,7 +88,7 @@ export default function App() {
     : null;
 
   return (
-    <main className="shell">
+    <main className={`shell${analyticsOpen ? " analytics-visible" : ""}`}>
       <CognitiveVoid
         graph={graph}
         activity={snapshot.event_count + (busy ? 1 : 0)}
@@ -108,8 +110,26 @@ export default function App() {
           <span>{snapshot.memory_count} MEMORIES</span>
           <span>{snapshot.node_count} NODES</span>
           <span>{snapshot.edge_count} EDGES</span>
+          <button
+            type="button"
+            className={`top-action${analyticsOpen ? " active" : ""}`}
+            onClick={() => setAnalyticsOpen((open) => !open)}
+            aria-pressed={analyticsOpen}
+          >
+            ANALYTICS
+          </button>
         </div>
       </header>
+
+      {analyticsOpen && (
+        <AnalyticsPanel
+          snapshot={snapshot}
+          graph={graph}
+          phase={activityPhase}
+          busy={busy}
+          onClose={() => setAnalyticsOpen(false)}
+        />
+      )}
 
       {!activePanel && (
         <section className="focus-copy">
