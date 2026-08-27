@@ -115,6 +115,12 @@ pub struct CognitiveEdge {
 }
 
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
+pub struct GraphSnapshot {
+    pub nodes: Vec<CognitiveNode>,
+    pub edges: Vec<CognitiveEdge>,
+}
+
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
 pub struct SystemSnapshot {
     pub kernel_online: bool,
     pub event_count: usize,
