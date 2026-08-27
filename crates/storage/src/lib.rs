@@ -4,7 +4,7 @@ use os_contracts::{
     CognitiveEvent, EntityRecord, FactRecord, MemoryKind, MemoryRecord, RelationshipRecord,
     Sensitivity,
 };
-use rusqlite::{params, Connection};
+use rusqlite::{Connection, params};
 use thiserror::Error;
 
 const MIGRATION_0001: &str = include_str!("../migrations/0001_init.sql");
@@ -304,17 +304,17 @@ impl Storage {
     }
 
     pub fn search_event_ids(&self, query: &str, limit: usize) -> Result<Vec<String>> {
-        let mut statement = self.connection.prepare(
-            "SELECT event_id FROM event_fts WHERE event_fts MATCH ?1 LIMIT ?2",
-        )?;
+        let mut statement = self
+            .connection
+            .prepare("SELECT event_id FROM event_fts WHERE event_fts MATCH ?1 LIMIT ?2")?;
         let rows = statement.query_map(params![query, limit as i64], |row| row.get(0))?;
         Ok(rows.collect::<std::result::Result<Vec<String>, rusqlite::Error>>()?)
     }
 
     pub fn search_memory_ids(&self, query: &str, limit: usize) -> Result<Vec<String>> {
-        let mut statement = self.connection.prepare(
-            "SELECT memory_id FROM memory_fts WHERE memory_fts MATCH ?1 LIMIT ?2",
-        )?;
+        let mut statement = self
+            .connection
+            .prepare("SELECT memory_id FROM memory_fts WHERE memory_fts MATCH ?1 LIMIT ?2")?;
         let rows = statement.query_map(params![query, limit as i64], |row| row.get(0))?;
         Ok(rows.collect::<std::result::Result<Vec<String>, rusqlite::Error>>()?)
     }
@@ -376,7 +376,9 @@ mod tests {
 
         assert_eq!(storage.event_count().expect("event count"), 1);
         assert_eq!(
-            storage.search_event_ids("cognitive", 10).expect("fts search"),
+            storage
+                .search_event_ids("cognitive", 10)
+                .expect("fts search"),
             vec!["event-1".to_string()]
         );
     }
@@ -424,7 +426,11 @@ mod tests {
                 provenance: vec!["test".into()],
             })
             .expect("insert fact");
-        assert!(storage.supersede_fact("fact-1", 20).expect("supersede fact"));
+        assert!(
+            storage
+                .supersede_fact("fact-1", 20)
+                .expect("supersede fact")
+        );
 
         storage
             .insert_relationship(&RelationshipRecord {
@@ -439,9 +445,11 @@ mod tests {
                 provenance: vec!["test".into()],
             })
             .expect("insert relationship");
-        assert!(storage
-            .invalidate_relationship("edge-1", 20)
-            .expect("invalidate relationship"));
+        assert!(
+            storage
+                .invalidate_relationship("edge-1", 20)
+                .expect("invalidate relationship")
+        );
 
         storage
             .upsert_memory(&MemoryRecord {
@@ -460,11 +468,15 @@ mod tests {
         assert_eq!(storage.relationship_count().expect("edge count"), 1);
         assert_eq!(storage.memory_count().expect("memory count"), 1);
         assert_eq!(
-            storage.search_memory_ids("temporal", 10).expect("memory search"),
+            storage
+                .search_memory_ids("temporal", 10)
+                .expect("memory search"),
             vec!["memory-1".to_string()]
         );
-        assert!(storage
-            .record_memory_retrieval("memory-1", true)
-            .expect("record retrieval"));
+        assert!(
+            storage
+                .record_memory_retrieval("memory-1", true)
+                .expect("record retrieval")
+        );
     }
 }
