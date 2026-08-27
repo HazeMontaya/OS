@@ -1,6 +1,6 @@
 use std::sync::Mutex;
 
-use os_contracts::SystemSnapshot;
+use os_contracts::{GraphSnapshot, SystemSnapshot};
 use os_kernel::Kernel;
 use tauri::Manager;
 
@@ -15,6 +15,15 @@ fn system_snapshot(state: tauri::State<'_, AppState>) -> SystemSnapshot {
         .lock()
         .expect("kernel lock poisoned")
         .snapshot()
+}
+
+#[tauri::command]
+fn graph_snapshot(state: tauri::State<'_, AppState>) -> GraphSnapshot {
+    state
+        .kernel
+        .lock()
+        .expect("kernel lock poisoned")
+        .graph_snapshot()
 }
 
 #[tauri::command]
@@ -41,7 +50,11 @@ pub fn run() {
 
             Ok(())
         })
-        .invoke_handler(tauri::generate_handler![system_snapshot, ingest_event])
+        .invoke_handler(tauri::generate_handler![
+            system_snapshot,
+            graph_snapshot,
+            ingest_event
+        ])
         .run(tauri::generate_context!())
         .expect("error while running OS");
 }
