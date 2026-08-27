@@ -39,14 +39,7 @@ impl PrivacyFilter {
             &mut categories,
             contains_any(
                 trimmed,
-                &[
-                    "ghp_",
-                    "github_pat_",
-                    "glpat-",
-                    "xoxb-",
-                    "xoxp-",
-                    "sk-",
-                ],
+                &["ghp_", "github_pat_", "glpat-", "xoxb-", "xoxp-", "sk-"],
             ),
             "token",
         );
@@ -67,10 +60,7 @@ impl PrivacyFilter {
         if !categories.is_empty() {
             return PrivacyAssessment {
                 sensitivity: Sensitivity::SecretReference,
-                stored_text: format!(
-                    "[protected secret reference: {}]",
-                    categories.join(",")
-                ),
+                stored_text: format!("[protected secret reference: {}]", categories.join(",")),
                 secret_categories: categories,
                 redacted: true,
             };
@@ -124,7 +114,8 @@ mod tests {
     #[test]
     fn redacts_known_secret_shapes() {
         let filter = PrivacyFilter;
-        let assessment = filter.assess("authorization: Bearer eyJabcdefghijklmnop.abcdefghijklmnop.abcdefghijklmnop");
+        let assessment = filter
+            .assess("authorization: Bearer eyJabcdefghijklmnop.abcdefghijklmnop.abcdefghijklmnop");
         assert_eq!(assessment.sensitivity, Sensitivity::SecretReference);
         assert!(assessment.redacted);
         assert!(!assessment.stored_text.contains("eyJabcdefghijklmnop"));
