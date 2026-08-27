@@ -2,7 +2,7 @@ use std::{env, fmt::Write, sync::Mutex};
 
 use os_contracts::{AskResult, ContextPack, GraphSnapshot, SystemSnapshot};
 use os_kernel::{Kernel, SemanticMemoryProjection};
-use os_model_gateway::{ChatMessage, LlamaCppClient, LlamaCppConfig};
+use os_model_gateway::{ApiKeys, ChatMessage, CloudClient, CloudConfig, LlamaCppClient, LlamaCppConfig, ModelCompletion, ProviderStatus};
 use os_privacy::PrivacyFilter;
 use os_semantic_index::{SemanticDocument, SemanticIndex};
 use serde::Serialize;
@@ -13,6 +13,7 @@ struct AppState {
     model: LlamaCppClient,
     embedding: LlamaCppClient,
     semantic: SemanticIndex,
+    api_keys: tokio::sync::Mutex<ApiKeys>,
 }
 
 struct SemanticQuery {
@@ -353,6 +354,84 @@ fn env_value(primary: &str, fallback: &str) -> Option<String> {
     })
 }
 
+// ── API Gateway Commands ──────────────────────────────────────────
+
+#[tauri::command]
+async fn get_api_keys(state: tauri::State<'_, AppState>) -> Result<ApiKeys, String> {
+    Ok(state.api_keys.lock().await.clone())
+}
+
+#[tauri::command]
+async fn set_api_key(provider: String, key: String, state: tauri::State<'_, AppState>) -> Result<(), String> {
+    let mut keys = state.api_keys.lock().await;
+    match provider.as_str() {
+        "openai" => keys.openai = key,
+        "anthropic" => keys.anthropic = key,
+        "openrouter" => keys.openrouter = key,
+        "ollama" => keys.ollama = key,
+        _ => return Err(format!("Unknown provider: {}", provider)),
+    }
+    Ok(())
+}
+
+#[tauri::command]
+async fn check_providers(state: tauri::State<'_, AppState>) -> Result<Vec<ProviderStatus>, String> {
+    let keys = state.api_keys.lock().await.clone();
+    let mut statuses = Vec::new();
+
+    if !keys.openai.is_empty() {
+        let client = CloudClient::new(CloudConfig::openai("gpt-4o-mini", &keys.openai))
+            .map_err(|e| e.to_string())?;
+        statuses.push(client.check_health().await);
+    } else {
+        statuses.push(ProviderStatus { provider: "OpenAI".into(), available: false, api_key_set: false, endpoint: "https://api.openai.com".into() });
+    }
+
+    if !keys.anthropic.is_empty() {
+        let client = CloudClient::new(CloudConfig::anthropic("claude-sonnet-4", &keys.anthropic))
+            .map_err(|e| e.to_string())?;
+        statuses.push(client.check_health().await);
+    } else {
+        statuses.push(ProviderStatus { provider: "Anthropic".into(), available: false, api_key_set: false, endpoint: "https://api.anthropic.com".into() });
+    }
+
+    {
+        let client = CloudClient::new(CloudConfig::ollama("llama3.2:3b"))
+            .map_err(|e| e.to_string())?;
+        statuses.push(client.check_health().await);
+    }
+
+    if !keys.openrouter.is_empty() {
+        let client = CloudClient::new(CloudConfig::openrouter("openai/gpt-4o-mini", &keys.openrouter))
+            .map_err(|e| e.to_string())?;
+        statuses.push(client.check_health().await);
+    } else {
+        statuses.push(ProviderStatus { provider: "OpenRouter".into(), available: false, api_key_set: false, endpoint: "https://openrouter.ai".into() });
+    }
+
+    Ok(statuses)
+}
+
+#[tauri::command]
+async fn cloud_chat(
+    content: String,
+    provider: String,
+    model: String,
+    state: tauri::State<'_, AppState>,
+) -> Result<ModelCompletion, String> {
+    let keys = state.api_keys.lock().await.clone();
+    let config = match provider.as_str() {
+        "openai" => CloudConfig::openai(&model, &keys.openai),
+        "anthropic" => CloudConfig::anthropic(&model, &keys.anthropic),
+        "openrouter" => CloudConfig::openrouter(&model, &keys.openrouter),
+        "ollama" => CloudConfig::ollama(&model),
+        _ => return Err(format!("Unknown provider: {}", provider)),
+    };
+    let client = CloudClient::new(config).map_err(|e| e.to_string())?;
+    let messages = vec![ChatMessage::user(content)];
+    client.chat(&messages, 2048, 0.7).await.map_err(|e| e.to_string())
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     tauri::Builder::default()
@@ -368,11 +447,14 @@ pub fn run() {
                 .map_err(std::io::Error::other)?;
 
             schedule_semantic_backfill(backfill, embedding.clone(), semantic.clone());
+            let env_path = data_dir.join(".env");
+            let api_keys = ApiKeys::load_from_file(env_path.to_str().unwrap_or(""));
             app.manage(AppState {
                 kernel: Mutex::new(kernel),
                 model,
                 embedding,
                 semantic,
+                api_keys: tokio::sync::Mutex::new(api_keys),
             });
 
             Ok(())
@@ -381,7 +463,11 @@ pub fn run() {
             system_snapshot,
             graph_snapshot,
             ingest_event,
-            ask
+            ask,
+            get_api_keys,
+            set_api_key,
+            check_providers,
+            cloud_chat,
         ])
         .run(tauri::generate_context!())
         .expect("error while running OS");

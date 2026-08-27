@@ -4,8 +4,6 @@ import { listen } from "@tauri-apps/api/event";
 import AnalyticsPanel from "./analytics/AnalyticsPanel";
 import CognitiveVoid from "./CognitiveVoid";
 import NodeInspector from "./inspector/NodeInspector";
-import SettingsPanel from "./settings/SettingsPanel";
-import { useOsSettings } from "./settings/useOsSettings";
 import {
   AskResult,
   CognitiveActivity,
@@ -18,7 +16,6 @@ import {
 } from "./cognitive";
 
 export default function App() {
-  const { settings, patchSettings, resetSettings } = useOsSettings();
   const [snapshot, setSnapshot] = useState<SystemSnapshot>(emptySystemSnapshot);
   const [graph, setGraph] = useState<GraphSnapshot>(emptyGraph);
   const [input, setInput] = useState("");
@@ -28,8 +25,7 @@ export default function App() {
   const [activityPhase, setActivityPhase] = useState<CognitiveActivityPhase | null>(null);
   const [activityComponent, setActivityComponent] = useState<string | null>(null);
   const [activityHistory, setActivityHistory] = useState<CognitiveActivityRecord[]>([]);
-  const [analyticsOpen, setAnalyticsOpen] = useState(settings.analyticsDefaultOpen);
-  const [settingsOpen, setSettingsOpen] = useState(false);
+  const [analyticsOpen, setAnalyticsOpen] = useState(true);
   const [selectedNodeId, setSelectedNodeId] = useState<string | null>(null);
 
   const refresh = async () => {
@@ -104,10 +100,9 @@ export default function App() {
   const selectedNode = selectedNodeId
     ? graph.nodes.find((node) => node.id === selectedNodeId) ?? null
     : null;
-  const densityClass = `density-${settings.interfaceDensity.toLowerCase()}`;
 
   return (
-    <main className={`shell${analyticsOpen ? " analytics-visible" : ""} ${densityClass}${settings.reducedMotion ? " reduced-motion" : ""}`}>
+    <main className={`shell${analyticsOpen ? " analytics-visible" : ""}`}>
       <CognitiveVoid
         graph={graph}
         activity={snapshot.event_count + (busy ? 1 : 0)}
@@ -127,14 +122,10 @@ export default function App() {
             {snapshot.kernel_online ? "KERNEL ONLINE" : "WEB PREVIEW"}
           </span>
           {livePhaseLabel && <span className="live-activity">{livePhaseLabel}</span>}
-          {settings.telemetryVisible && (
-            <>
-              <span>{snapshot.event_count} EVENTS</span>
-              <span>{snapshot.memory_count} MEMORIES</span>
-              <span>{snapshot.node_count} NODES</span>
-              <span>{snapshot.edge_count} EDGES</span>
-            </>
-          )}
+          <span>{snapshot.event_count} EVENTS</span>
+          <span>{snapshot.memory_count} MEMORIES</span>
+          <span>{snapshot.node_count} NODES</span>
+          <span>{snapshot.edge_count} EDGES</span>
           <button
             type="button"
             className={`top-action${analyticsOpen ? " active" : ""}`}
@@ -143,18 +134,10 @@ export default function App() {
           >
             ANALYTICS
           </button>
-          <button
-            type="button"
-            className={`top-action${settingsOpen ? " active" : ""}`}
-            onClick={() => setSettingsOpen((open) => !open)}
-            aria-pressed={settingsOpen}
-          >
-            SETTINGS
-          </button>
         </div>
       </header>
 
-      {analyticsOpen && !settingsOpen && (
+      {analyticsOpen && (
         <AnalyticsPanel
           snapshot={snapshot}
           graph={graph}
@@ -165,16 +148,7 @@ export default function App() {
         />
       )}
 
-      {settingsOpen && (
-        <SettingsPanel
-          settings={settings}
-          onChange={patchSettings}
-          onReset={resetSettings}
-          onClose={() => setSettingsOpen(false)}
-        />
-      )}
-
-      {selectedNode && !settingsOpen && (
+      {selectedNode && (
         <NodeInspector
           node={selectedNode}
           graph={graph}
@@ -182,7 +156,7 @@ export default function App() {
         />
       )}
 
-      {!activePanel && !settingsOpen && (
+      {!activePanel && (
         <section className="focus-copy">
           <p className="eyebrow">ACTIVE CONTEXT</p>
           <h1>Cognition is the interface.</h1>
@@ -192,7 +166,7 @@ export default function App() {
         </section>
       )}
 
-      {activePanel && !settingsOpen && (
+      {activePanel && (
         <section className="response-panel glass" aria-live="polite">
           <header>
             <span className="eyebrow">COGNITIVE OUTPUT</span>

@@ -1,8 +1,0 @@
-[package]
-name = "os-devtools"
-version.workspace = true
-edition.workspace = true
-publish = false
-
-[dependencies]
-os-runtime = { path = "../../crates/runtime" }

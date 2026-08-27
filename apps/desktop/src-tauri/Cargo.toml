@@ -19,3 +19,5 @@ os-kernel = { path = "../../../crates/kernel" }
 os-model-gateway = { path = "../../../crates/model-gateway" }
 os-privacy = { path = "../../../crates/privacy" }
 os-semantic-index = { path = "../../../crates/semantic-index" }
+tokio = { version = "1", features = ["sync"] }
+serde_json.workspace = true

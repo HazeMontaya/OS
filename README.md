@@ -55,7 +55,7 @@ The two root-level command files use **strict source-wins mirror semantics**. Th
 
 ### Online → local
 
-`GIT-DOWNLOAD-ONLINE-NACH-S-OS.cmd` treats GitHub `origin/main` as authoritative.
+`GIT-DOWNLOAD.cmd` treats GitHub `origin/main` as authoritative.
 
 The command copies itself to `%TEMP%`, creates a completely fresh verified clone at `S:\OS.__incoming__`, enables Git long-path handling, synchronizes submodules, hard-resets and cleans the clone, verifies that `HEAD` exactly matches `origin/main`, then swaps the old `S:\OS` out and activates the new clone. Only after the new clone is active is the old `S:\OS.__old__` removed.
 
@@ -63,7 +63,7 @@ This means old local tracked files, ignored build files, runtime data, untracked
 
 ### Local → online
 
-`GIT-UPLOAD-S-OS-NACH-ONLINE.cmd` treats the current filesystem content under `S:\OS` as authoritative.
+`GIT-UPLOAD.cmd` treats the current filesystem content under `S:\OS` as authoritative.
 
 The command does **not** push arbitrary local Git history. It creates a fresh temporary Git index from the current filesystem, respecting `.gitignore`, then writes a new repository tree and creates a mirror commit directly on top of the current `origin/main`. The resulting online tree therefore removes every old online file that is not part of the current clean local source tree.
 

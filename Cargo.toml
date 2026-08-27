@@ -1,8 +1,6 @@
 [workspace]
 resolver = "2"
 members = [
-  "apps/cli",
-  "apps/devtools",
   "apps/desktop/src-tauri",
   "crates/contracts",
   "crates/event-ledger",
@@ -16,11 +14,6 @@ members = [
   "crates/model-gateway",
   "crates/telemetry",
   "crates/orchestrator",
-  "crates/agents",
-  "crates/tools",
-  "crates/automation",
-  "crates/system",
-  "crates/runtime",
   "crates/kernel",
 ]
 
