@@ -70,7 +70,10 @@ impl Kernel {
     pub fn snapshot(&self) -> SystemSnapshot {
         SystemSnapshot {
             kernel_online: true,
-            event_count: self.storage.event_count().unwrap_or_else(|_| self.ledger.len()),
+            event_count: self
+                .storage
+                .event_count()
+                .unwrap_or_else(|_| self.ledger.len()),
             memory_count: self
                 .storage
                 .memory_count()
