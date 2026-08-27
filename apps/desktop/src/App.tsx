@@ -1,8 +1,11 @@
 import { FormEvent, useEffect, useState } from "react";
 import { invoke } from "@tauri-apps/api/core";
+import { listen } from "@tauri-apps/api/event";
 import CognitiveVoid from "./CognitiveVoid";
 import {
   AskResult,
+  CognitiveActivity,
+  CognitiveActivityPhase,
   emptyGraph,
   emptySystemSnapshot,
   GraphSnapshot,
@@ -16,6 +19,8 @@ export default function App() {
   const [answer, setAnswer] = useState<AskResult | null>(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [activityPhase, setActivityPhase] = useState<CognitiveActivityPhase | null>(null);
+  const [activityComponent, setActivityComponent] = useState<string | null>(null);
 
   const refresh = async () => {
     try {
@@ -35,6 +40,24 @@ export default function App() {
     void refresh();
   }, []);
 
+  useEffect(() => {
+    let unlisten: (() => void) | undefined;
+    void listen<CognitiveActivity>("cognitive-activity", (event) => {
+      const activity = event.payload;
+      if (activity.active) {
+        setActivityPhase(activity.phase);
+        setActivityComponent(activity.component);
+      } else {
+        setActivityPhase(null);
+        setActivityComponent(activity.component);
+      }
+    }).then((dispose) => {
+      unlisten = dispose;
+    });
+
+    return () => unlisten?.();
+  }, []);
+
   const submit = async (event: FormEvent) => {
     event.preventDefault();
     const content = input.trim();
@@ -52,17 +75,22 @@ export default function App() {
       setError(String(cause));
     } finally {
       await refresh();
+      setActivityPhase(null);
       setBusy(false);
     }
   };
 
   const activePanel = busy || answer !== null || error !== null;
+  const livePhaseLabel = activityPhase
+    ? activityPhase.replaceAll("_", " ").toUpperCase()
+    : null;
 
   return (
     <main className="shell">
       <CognitiveVoid
         graph={graph}
         activity={snapshot.event_count + (busy ? 1 : 0)}
+        phase={activityPhase}
       />
 
       <header className="topbar glass">
@@ -75,6 +103,7 @@ export default function App() {
           <span className={snapshot.kernel_online ? "online" : "offline"}>
             {snapshot.kernel_online ? "KERNEL ONLINE" : "WEB PREVIEW"}
           </span>
+          {livePhaseLabel && <span className="live-activity">{livePhaseLabel}</span>}
           <span>{snapshot.event_count} EVENTS</span>
           <span>{snapshot.memory_count} MEMORIES</span>
           <span>{snapshot.node_count} NODES</span>
@@ -97,14 +126,16 @@ export default function App() {
           <header>
             <span className="eyebrow">COGNITIVE OUTPUT</span>
             <span className="response-meta">
-              {busy ? "LOCAL INFERENCE" : answer?.model ?? "MODEL ERROR"}
+              {busy
+                ? `${livePhaseLabel ?? "COGNITIVE TURN"}${activityComponent ? ` · ${activityComponent}` : ""}`
+                : answer?.model ?? "MODEL ERROR"}
             </span>
           </header>
 
           {busy && (
             <div className="thinking-state">
               <span className="thinking-orbit" />
-              <p>Retrieving memory and reasoning locally…</p>
+              <p>{livePhaseLabel ?? "Processing cognition"}…</p>
             </div>
           )}
 
