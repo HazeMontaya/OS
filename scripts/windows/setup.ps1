@@ -15,9 +15,9 @@ if ([Environment]::OSVersion.Platform -ne [PlatformID]::Win32NT) {
     throw "OS-SETUP.cmd is intended for Windows."
 }
 
-if (-not (Test-OsCommand "winget")) {
-    throw "Windows Package Manager (winget) is missing. Install/repair Microsoft App Installer and run OS-SETUP.cmd again."
-}
+Write-OsStep "Checking Windows Package Manager bootstrap ..."
+$winget = Ensure-Winget
+Write-OsOk ("WinGet bootstrap ready: " + (& $winget --version))
 
 Write-OsStep "Checking source/build toolchain ..."
 Ensure-WingetPackage -Command "git" -PackageId "Git.Git" -DisplayName "Git for Windows"
@@ -29,10 +29,10 @@ if (-not (Test-MsvcBuildTools)) {
     Write-OsStep "Installing Microsoft C++ Build Tools for Tauri/Rust ..."
     $vsArgs = @(
         "install", "--id", "Microsoft.VisualStudio.2022.BuildTools", "-e", "--source", "winget",
-        "--accept-source-agreements", "--accept-package-agreements", "--silent",
+        "--accept-source-agreements", "--accept-package-agreements", "--silent", "--disable-interactivity",
         "--override", "--wait --passive --norestart --add Microsoft.VisualStudio.Workload.VCTools --includeRecommended"
     )
-    Invoke-OsNative "winget" @vsArgs
+    Invoke-Winget @vsArgs
     if (-not (Test-MsvcBuildTools)) {
         throw "Visual Studio C++ Build Tools were installed but are not visible yet. Restart Windows once, then run OS-SETUP.cmd again; the setup will continue without reinstalling completed components."
     }
