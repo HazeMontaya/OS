@@ -34,13 +34,10 @@ if (-not (Test-MsvcBuildTools)) {
     )
     Invoke-OsNative "winget" @vsArgs
     if (-not (Test-MsvcBuildTools)) {
-        Write-OsWarn "Visual Studio Build Tools installation finished but VC tools are not visible yet. A Windows restart may be required before the first build."
-    } else {
-        Write-OsOk "Microsoft C++ Build Tools available."
+        throw "Visual Studio C++ Build Tools were installed but are not visible yet. Restart Windows once, then run OS-SETUP.cmd again; the setup will continue without reinstalling completed components."
     }
-} else {
-    Write-OsOk "Microsoft C++ Build Tools available."
 }
+Write-OsOk "Microsoft C++ Build Tools available."
 
 if (-not (Test-WebView2Runtime)) {
     Write-OsStep "Installing Microsoft Edge WebView2 Runtime ..."
@@ -51,9 +48,11 @@ if (-not (Test-WebView2Runtime)) {
     if ($process.ExitCode -ne 0 -and $process.ExitCode -ne 3010) {
         throw "WebView2 installer failed with exit code $($process.ExitCode)."
     }
-} else {
-    Write-OsOk "Microsoft Edge WebView2 Runtime available."
+    if (-not (Test-WebView2Runtime)) {
+        throw "WebView2 installation finished but the runtime is not detectable yet. Restart Windows and run OS-SETUP.cmd again."
+    }
 }
+Write-OsOk "Microsoft Edge WebView2 Runtime available."
 
 Write-OsStep "Configuring Rust MSVC toolchain ..."
 Refresh-OsPath
@@ -130,13 +129,11 @@ Write-OsStep "Validating TypeScript workspace ..."
 Invoke-OsNative "pnpm" "typecheck"
 
 if (-not $SkipBuild) {
-    Write-OsStep "Building startable Windows release executable ..."
-    Invoke-OsNative "pnpm" "--filter" "@os/desktop" "tauri" "build" "--no-bundle"
-    $exe = Get-ReleaseExecutablePath
-    if (-not (Test-Path -LiteralPath $exe)) {
-        throw "Tauri build completed but the expected release executable was not found at $exe."
+    Write-OsStep "Building and marking the startable Windows release executable ..."
+    & (Join-Path $PSScriptRoot "build.ps1") -NoValidation
+    if ($LASTEXITCODE -ne 0) {
+        throw "Release build failed."
     }
-    Write-OsOk "Release executable: $exe"
 }
 
 Write-OsHeader "SETUP COMPLETE"
