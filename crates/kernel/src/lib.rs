@@ -5,11 +5,11 @@ use std::{
 
 use os_contracts::{
     CognitiveEdge, CognitiveEvent, CognitiveNode, EntityRecord, GraphSnapshot, MemoryKind,
-    MemoryRecord, RelationshipRecord, SystemSnapshot,
+    RelationshipRecord, SystemSnapshot,
 };
 use os_event_ledger::EventLedger;
 use os_knowledge_graph::KnowledgeGraph;
-use os_memory::MemoryStore;
+use os_memory::{MemoryCompileInput, MemoryCompiler, MemoryStore};
 use os_privacy::PrivacyFilter;
 use os_retrieval::{RecallHit, RetrievalEngine};
 use os_storage::{Storage, StorageError};
@@ -28,6 +28,7 @@ pub struct Kernel {
     storage: Storage,
     ledger: EventLedger,
     memory: MemoryStore,
+    memory_compiler: MemoryCompiler,
     graph: KnowledgeGraph,
     retrieval: RetrievalEngine,
     privacy: PrivacyFilter,
@@ -97,6 +98,7 @@ impl Kernel {
             storage,
             ledger: EventLedger::default(),
             memory,
+            memory_compiler: MemoryCompiler,
             graph,
             retrieval: RetrievalEngine::default(),
             privacy: PrivacyFilter,
@@ -112,12 +114,6 @@ impl Kernel {
 
         let privacy = self.privacy.assess(&content);
         let stored_content = privacy.stored_text.clone();
-        let memory_entity_kind = if privacy.redacted {
-            "secret_reference"
-        } else {
-            "episodic_memory"
-        };
-
         let now = now_ms();
         let event_id = Uuid::new_v4().to_string();
         let trace_id = Uuid::new_v4().to_string();
@@ -153,16 +149,19 @@ impl Kernel {
         self.storage.append_event(&event)?;
         self.ledger.append(event.clone());
 
-        let memory = MemoryRecord {
+        let memory = self.memory_compiler.compile(MemoryCompileInput {
             id: memory_id.clone(),
-            kind: MemoryKind::Episodic,
             text: stored_content.clone(),
-            relevance: if privacy.redacted { 0.4 } else { 0.75 },
-            confidence: 1.0,
-            first_seen_ms: now,
-            last_confirmed_ms: now,
+            sensitivity: privacy.sensitivity,
+            observed_at_ms: now,
             provenance: vec![event_id.clone()],
+        });
+        let memory_entity_kind = if privacy.redacted {
+            "secret_reference"
+        } else {
+            memory_node_kind(&memory.kind)
         };
+        let memory_relevance = memory.relevance;
         self.storage.upsert_memory(&memory)?;
         self.memory.upsert(memory);
 
@@ -194,7 +193,7 @@ impl Kernel {
             from_entity_id: actor_id.clone(),
             to_entity_id: memory_id.clone(),
             relation: "generated".into(),
-            weight: if privacy.redacted { 0.55 } else { 1.0 },
+            weight: (0.4 + memory_relevance * 0.6).clamp(0.0, 1.0),
             confidence: 1.0,
             valid_from_ms: now,
             valid_until_ms: None,
@@ -213,7 +212,8 @@ impl Kernel {
             id: memory_id.clone(),
             kind: memory_entity_kind.into(),
             label: compact_label(&stored_content),
-            importance: node_importance(memory_entity_kind),
+            importance: ((node_importance(memory_entity_kind) + memory_relevance) / 2.0)
+                .clamp(0.0, 1.0),
             confidence: 1.0,
         });
         self.graph.add_edge(CognitiveEdge {
@@ -277,14 +277,29 @@ impl Kernel {
     }
 }
 
+fn memory_node_kind(kind: &MemoryKind) -> &'static str {
+    match kind {
+        MemoryKind::Working => "working_memory",
+        MemoryKind::Episodic => "episodic_memory",
+        MemoryKind::Semantic => "semantic_memory",
+        MemoryKind::Procedural => "procedural_memory",
+        MemoryKind::Stable => "stable_memory",
+        MemoryKind::Preference => "preference_memory",
+        MemoryKind::Project => "project_memory",
+        MemoryKind::SelfModel => "self_model",
+        MemoryKind::WorldModel => "world_model",
+    }
+}
+
 fn node_importance(kind: &str) -> f32 {
     match kind {
         "self_model" => 1.0,
         "actor" => 0.95,
         "semantic_memory" | "stable_memory" => 0.85,
+        "preference_memory" | "procedural_memory" => 0.80,
+        "project_memory" | "project" | "goal" => 0.82,
         "episodic_memory" => 0.70,
         "secret_reference" => 0.35,
-        "project" | "goal" => 0.82,
         "agent" | "model" | "tool" => 0.78,
         _ => 0.55,
     }
@@ -336,15 +351,40 @@ mod tests {
     }
 
     #[test]
+    fn explicit_rules_are_compiled_as_stable_memory() {
+        let mut kernel = Kernel::in_memory().expect("create kernel");
+        kernel
+            .ingest_user_input("Grundregel: immer merken, dass Provenance erhalten bleibt".into())
+            .expect("ingest stable rule");
+        assert!(
+            kernel
+                .graph_snapshot()
+                .nodes
+                .iter()
+                .any(|node| node.kind == "stable_memory")
+        );
+    }
+
+    #[test]
     fn secrets_are_redacted_before_persistence_and_recall() {
         let mut kernel = Kernel::in_memory().expect("create kernel");
         kernel
             .ingest_user_input("api_key=ghp_supersecretvalue".into())
             .expect("ingest secret event");
 
-        assert!(kernel.recall("supersecretvalue", 5).expect("secret recall").is_empty());
+        assert!(
+            kernel
+                .recall("supersecretvalue", 5)
+                .expect("secret recall")
+                .is_empty()
+        );
         let graph = kernel.graph_snapshot();
-        assert!(graph.nodes.iter().any(|node| node.kind == "secret_reference"));
+        assert!(
+            graph
+                .nodes
+                .iter()
+                .any(|node| node.kind == "secret_reference")
+        );
     }
 
     #[test]
