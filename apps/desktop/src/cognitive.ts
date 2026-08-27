@@ -41,6 +41,11 @@ export type CognitiveActivity = {
   component: string;
 };
 
+export type CognitiveActivityRecord = CognitiveActivity & {
+  id: string;
+  received_at_ms: number;
+};
+
 export type CognitiveNode = {
   id: string;
   kind: string;
