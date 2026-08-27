@@ -1,5 +1,6 @@
 export type RenderQuality = "LOW" | "MEDIUM" | "HIGH" | "ULTRA";
 export type RenderBackend = "WEBGPU" | "WEBGL";
+export type GpuFeatureTier = "WEBGL_BATCHED" | "WEBGPU_COMPUTE";
 
 export type RenderProfile = {
   label: string;
@@ -23,6 +24,14 @@ export type RenderBudget = {
   labels: number;
   pickProxies: number;
   ambientSignals: number;
+};
+
+export type GpuPipelineStatus = {
+  backend: RenderBackend;
+  tier: GpuFeatureTier;
+  computeShaders: boolean;
+  sharedStorageVertexBuffer: boolean;
+  signalParticleBudget: number;
 };
 
 export const RENDER_PROFILES: Record<RenderQuality, RenderProfile> = {
@@ -103,9 +112,35 @@ export function resolveRenderBudget(
     edges: Math.max(0, Math.floor(profile.maxVisibleEdges * density)),
     labels: Math.max(0, Math.floor(profile.labelBudget * labelScale)),
     pickProxies: Math.max(16, Math.floor(profile.pickProxyBudget * Math.min(1.25, density))),
-    // Ambient signals deliberately consume only a small fraction of the generic particle budget.
-    // This keeps the visualization alive without competing with cognitive data for frame time.
-    ambientSignals: Math.max(0, Math.min(6_400, Math.floor(profile.particleBudget * 0.035 * ambientScale))),
+    // SPS is the compatibility fallback. The WebGPU compute field receives its own much larger budget.
+    ambientSignals: Math.max(0, Math.min(900, Math.floor(profile.particleBudget * 0.018 * ambientScale))),
+  };
+}
+
+export function resolveGpuSignalBudget(
+  profile: RenderProfile,
+  ambientIntensity: number,
+  computeSupported: boolean,
+): number {
+  if (!computeSupported) return 0;
+  const ambientScale = Math.max(0, Math.min(1.5, ambientIntensity));
+  const base = profile.particleBudget * 0.5 * ambientScale;
+  return Math.max(512, Math.min(96_000, Math.floor(base)));
+}
+
+export function describeGpuPipeline(
+  backend: RenderBackend,
+  computeSupported: boolean,
+  profile: RenderProfile,
+  ambientIntensity: number,
+): GpuPipelineStatus {
+  const compute = backend === "WEBGPU" && computeSupported;
+  return {
+    backend,
+    tier: compute ? "WEBGPU_COMPUTE" : "WEBGL_BATCHED",
+    computeShaders: compute,
+    sharedStorageVertexBuffer: compute,
+    signalParticleBudget: resolveGpuSignalBudget(profile, ambientIntensity, compute),
   };
 }
 

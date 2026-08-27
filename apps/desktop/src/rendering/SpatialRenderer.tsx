@@ -3,11 +3,18 @@ import type { WorkspaceId } from "@os/protocol";
 import { getTheme, OS_SEMANTIC_GOLD } from "@os/design-system";
 import {
   adaptiveResolutionScale,
+  describeGpuPipeline,
   RENDER_PROFILES,
   resolveRenderBudget,
+  type GpuFeatureTier,
   type RenderBackend,
 } from "@os/renderer";
-import { workspaceById, type SemanticZoomLevel } from "@os/visualization";
+import {
+  workspaceById,
+  type CameraMode,
+  type SemanticZoomLevel,
+  type SpatialLayoutMode,
+} from "@os/visualization";
 import { ArcRotateCamera } from "@babylonjs/core/Cameras/arcRotateCamera";
 import type { AbstractEngine } from "@babylonjs/core/Engines/abstractEngine";
 import { Engine } from "@babylonjs/core/Engines/engine";
@@ -31,6 +38,8 @@ import type {
   GraphSnapshot,
 } from "../cognitive";
 import type { OsSettings } from "../settings/useOsSettings";
+import { CameraDirector } from "./CameraDirector";
+import { GpuSignalField } from "./GpuSignalField";
 
 type Props = {
   graph: GraphSnapshot;
@@ -79,6 +88,7 @@ type VisualProjection = {
 const GOLDEN_ANGLE = Math.PI * (3 - Math.sqrt(5));
 const MAX_AMBIENT_SIGNALS = 900;
 const MAX_TRACE_PACKETS = 48;
+const CAMERA_MODES: CameraMode[] = ["FREE", "FOCUS", "FOLLOW", "TRACE", "OVERVIEW", "CINEMATIC"];
 
 function clamp01(value: number) {
   return Math.max(0, Math.min(1, value));
@@ -147,6 +157,22 @@ function baseClusterRadius(kind: string) {
   }
 }
 
+function kindLane(kind: string) {
+  switch (kind) {
+    case "goal": return -5;
+    case "project": return -4;
+    case "actor": return -3;
+    case "agent": return -2;
+    case "self_model": return 0;
+    case "model": return 1;
+    case "tool": return 2;
+    case "episodic_memory": return 3;
+    case "semantic_memory": return 4;
+    case "stable_memory": return 5;
+    default: return 0;
+  }
+}
+
 function clusterSeed(kind: string, workspaceId: WorkspaceId) {
   if (kind === "self_model") return Vector3.Zero();
   const angle = hashUnit(`${workspaceId}:${kind}:angle`) * Math.PI * 2;
@@ -155,15 +181,100 @@ function clusterSeed(kind: string, workspaceId: WorkspaceId) {
   return new Vector3(Math.cos(angle) * radius, y, Math.sin(angle) * radius);
 }
 
-function nodePosition(node: CognitiveNode, localIndex: number, workspaceId: WorkspaceId) {
+function constellationPosition(node: CognitiveNode, localIndex: number, workspaceId: WorkspaceId) {
   if (node.kind === "self_model") return Vector3.Zero();
   const center = clusterSeed(node.kind, workspaceId);
   const angle = localIndex * GOLDEN_ANGLE + hashUnit(`${workspaceId}:${node.id}`) * Math.PI * 2;
-  const importance = clamp01(node.importance);
-  const confidence = clamp01(node.confidence);
-  const localRadius = 0.5 + hashUnit(`${node.id}:local`) * (1.25 + (1 - importance) * 0.9);
-  const y = (hashUnit(`${node.id}:vertical`) - 0.5) * (1.6 + (1 - confidence) * 1.2);
+  const localRadius = 0.55 + hashUnit(`${node.id}:local`) * 2.05;
+  const y = (hashUnit(`${node.id}:vertical`) - 0.5) * 2.45;
   return center.add(new Vector3(Math.cos(angle) * localRadius, y, Math.sin(angle) * localRadius));
+}
+
+function knowledgeSpherePosition(node: CognitiveNode, localIndex: number) {
+  if (node.kind === "self_model") return Vector3.Zero();
+  const shell = baseClusterRadius(node.kind) * 0.68 + 5.5;
+  const yUnit = 1 - 2 * hashUnit(`${node.id}:knowledge-y`);
+  const planar = Math.sqrt(Math.max(0, 1 - yUnit * yUnit));
+  const angle = localIndex * GOLDEN_ANGLE + hashUnit(`${node.id}:knowledge-a`) * Math.PI * 2;
+  const radialJitter = (hashUnit(`${node.id}:knowledge-r`) - 0.5) * 2.2;
+  const radius = shell + radialJitter;
+  return new Vector3(
+    Math.cos(angle) * planar * radius,
+    yUnit * radius * 0.82,
+    Math.sin(angle) * planar * radius,
+  );
+}
+
+function temporalHelixPosition(node: CognitiveNode, localIndex: number) {
+  if (node.kind === "self_model") return Vector3.Zero();
+  const memoryBand = node.kind === "stable_memory" ? 3 : node.kind === "semantic_memory" ? 2 : node.kind === "episodic_memory" ? 1 : 0;
+  const angle = localIndex * 0.57 + hashUnit(`${node.id}:memory-a`) * 1.4;
+  const radius = 7.2 + memoryBand * 2.25 + hashUnit(`${node.id}:memory-r`) * 1.6;
+  const layer = (localIndex % 41) - 20;
+  const y = layer * 0.42 + memoryBand * 0.72 + (hashUnit(`${node.id}:memory-y`) - 0.5) * 0.7;
+  return new Vector3(Math.cos(angle) * radius, y, Math.sin(angle) * radius);
+}
+
+function executionOrbitPosition(node: CognitiveNode, localIndex: number) {
+  if (node.kind === "self_model") return Vector3.Zero();
+  const orbit = node.kind === "agent" ? 5.2
+    : node.kind === "model" ? 8.1
+      : node.kind === "tool" ? 11.2
+        : node.kind === "goal" ? 13.8
+          : node.kind === "project" ? 15.8
+            : 9.5;
+  const angle = localIndex * GOLDEN_ANGLE + hashUnit(`${node.id}:agent-a`) * Math.PI * 2;
+  const tilt = (hashUnit(`${node.id}:agent-y`) - 0.5) * 2.7;
+  const wobble = (hashUnit(`${node.id}:agent-r`) - 0.5) * 1.2;
+  return new Vector3(Math.cos(angle) * (orbit + wobble), tilt, Math.sin(angle) * (orbit + wobble));
+}
+
+function traceMatrixPosition(node: CognitiveNode, localIndex: number) {
+  if (node.kind === "self_model") return Vector3.Zero();
+  const lane = kindLane(node.kind);
+  const row = localIndex % 23;
+  const deck = Math.floor(localIndex / 23);
+  return new Vector3(
+    lane * 3.3 + (hashUnit(`${node.id}:trace-x`) - 0.5) * 0.7,
+    (deck - 2) * 1.45 + (hashUnit(`${node.id}:trace-y`) - 0.5) * 0.55,
+    (row - 11) * 1.18,
+  );
+}
+
+function systemRingPosition(node: CognitiveNode, localIndex: number) {
+  if (node.kind === "self_model") return Vector3.Zero();
+  const ringIndex = Math.abs(kindLane(node.kind));
+  const radius = 6.2 + ringIndex * 2.15 + hashUnit(`${node.id}:system-r`) * 1.1;
+  const angle = localIndex * GOLDEN_ANGLE + ringIndex * 0.42 + hashUnit(`${node.id}:system-a`) * 0.6;
+  const y = (kindLane(node.kind) * 0.65) + (hashUnit(`${node.id}:system-y`) - 0.5) * 0.65;
+  return new Vector3(Math.cos(angle) * radius, y, Math.sin(angle) * radius);
+}
+
+function automationCircuitPosition(node: CognitiveNode, localIndex: number) {
+  if (node.kind === "self_model") return Vector3.Zero();
+  const lane = kindLane(node.kind);
+  const row = localIndex % 19;
+  const deck = Math.floor(localIndex / 19);
+  const x = lane * 3.4;
+  const z = (row - 9) * 1.4 + Math.sin((row / 18) * Math.PI) * lane * 0.16;
+  const y = (deck - 1.5) * 1.1 + (hashUnit(`${node.id}:auto-y`) - 0.5) * 0.45;
+  return new Vector3(x, y, z);
+}
+
+function nodePosition(node: CognitiveNode, localIndex: number, workspaceId: WorkspaceId) {
+  const layout: SpatialLayoutMode = workspaceById(workspaceId).layoutMode;
+  switch (layout) {
+    case "KNOWLEDGE_SPHERE": return knowledgeSpherePosition(node, localIndex);
+    case "TEMPORAL_HELIX": return temporalHelixPosition(node, localIndex);
+    case "EXECUTION_ORBITS": return executionOrbitPosition(node, localIndex);
+    case "TRACE_MATRIX": return traceMatrixPosition(node, localIndex);
+    case "SYSTEM_RINGS": return systemRingPosition(node, localIndex);
+    case "AUTOMATION_CIRCUIT": return automationCircuitPosition(node, localIndex);
+    case "CONFIGURATION_CHAMBER": return node.kind === "self_model" ? Vector3.Zero() : constellationPosition(node, localIndex, workspaceId).scale(0.48);
+    case "COGNITIVE_CONSTELLATION":
+    default:
+      return constellationPosition(node, localIndex, workspaceId);
+  }
 }
 
 function nodeVisualSize(node: CognitiveNode) {
@@ -269,7 +380,6 @@ function makeProjection(
   settings: OsSettings,
   phase: CognitiveActivityPhase | null,
 ): VisualProjection {
-  const workspace = workspaceById(workspaceId);
   const profile = RENDER_PROFILES[settings.renderQuality];
   const budget = resolveRenderBudget(profile, settings.graphDensity, settings.labelDensity, settings.ambientParticles);
   const theme = getTheme(settings.themeId);
@@ -558,7 +668,7 @@ function disposeProjection(projection: VisualProjection | null) {
   if (!projection) return;
   projection.root.dispose(false);
   for (const resource of projection.resources) {
-    try { resource.dispose(); } catch { /* Babylon resources are idempotent enough for defensive teardown. */ }
+    try { resource.dispose(); } catch { /* Defensive teardown for Babylon resources. */ }
   }
 }
 
@@ -575,8 +685,11 @@ export default function SpatialRenderer({
   const engineRef = useRef<AbstractEngine | null>(null);
   const sceneRef = useRef<Scene | null>(null);
   const cameraRef = useRef<ArcRotateCamera | null>(null);
+  const cameraDirectorRef = useRef<CameraDirector | null>(null);
   const glowRef = useRef<GlowLayer | null>(null);
   const projectionRef = useRef<VisualProjection | null>(null);
+  const gpuFieldRef = useRef<GpuSignalField | null>(null);
+  const backendRef = useRef<RenderBackend>("WEBGL");
   const graphRef = useRef(graph);
   const activityRef = useRef(activity);
   const phaseRef = useRef(phase);
@@ -585,8 +698,6 @@ export default function SpatialRenderer({
   const selectedNodeIdRef = useRef(selectedNodeId);
   const hoverNodeIdRef = useRef<string | null>(null);
   const onSelectNodeRef = useRef(onSelectNode);
-  const cameraTargetRef = useRef(Vector3.Zero());
-  const desiredRadiusRef = useRef<number | null>(null);
   const effectiveScaleRef = useRef(RENDER_PROFILES[settings.renderQuality].resolutionScale);
   const lastAdaptRef = useRef(0);
   const lastRenderRef = useRef(0);
@@ -595,6 +706,9 @@ export default function SpatialRenderer({
   const zoomLevelRef = useRef<SemanticZoomLevel>("network");
   const [hoverInfo, setHoverInfo] = useState<HoverInfo>(null);
   const [backend, setBackend] = useState<RenderBackend>("WEBGL");
+  const [gpuTier, setGpuTier] = useState<GpuFeatureTier>("WEBGL_BATCHED");
+  const [gpuSignals, setGpuSignals] = useState(0);
+  const [cameraMode, setCameraMode] = useState<CameraMode>(workspaceById(workspaceId).preferredCamera);
   const [measuredFps, setMeasuredFps] = useState(0);
   const [effectiveScale, setEffectiveScale] = useState(effectiveScaleRef.current);
 
@@ -606,6 +720,43 @@ export default function SpatialRenderer({
   useEffect(() => { workspaceIdRef.current = workspaceId; }, [workspaceId]);
   useEffect(() => { settingsRef.current = settings; }, [settings]);
   useEffect(() => { onSelectNodeRef.current = onSelectNode; }, [onSelectNode]);
+
+  const rebuildGpuField = () => {
+    gpuFieldRef.current?.dispose();
+    gpuFieldRef.current = null;
+    setGpuSignals(0);
+
+    const engine = engineRef.current;
+    const scene = sceneRef.current;
+    if (!engine || !scene) return;
+
+    const profile = RENDER_PROFILES[settingsRef.current.renderQuality];
+    const computeSupported = GpuSignalField.supported(engine);
+    const pipeline = describeGpuPipeline(
+      backendRef.current,
+      computeSupported,
+      profile,
+      settingsRef.current.ambientParticles,
+    );
+    setGpuTier(pipeline.tier);
+    if (!pipeline.computeShaders || pipeline.signalParticleBudget <= 0) return;
+
+    const theme = getTheme(settingsRef.current.themeId);
+    try {
+      gpuFieldRef.current = new GpuSignalField(engine, scene, {
+        count: pipeline.signalParticleBudget,
+        radius: workspaceById(workspaceIdRef.current).cameraRadius * 1.55,
+        vertical: Math.max(10, workspaceById(workspaceIdRef.current).cameraRadius * 0.82),
+        gold: parseHex(theme.gold),
+        pointSize: settingsRef.current.renderQuality === "ULTRA" ? 1.55 : settingsRef.current.renderQuality === "HIGH" ? 1.35 : 1.1,
+      });
+      setGpuSignals(pipeline.signalParticleBudget);
+    } catch (error) {
+      console.warn("OS SpatialRenderer: compute signal field disabled after initialization failure.", error);
+      setGpuTier("WEBGL_BATCHED");
+      setGpuSignals(0);
+    }
+  };
 
   const rebuild = () => {
     const scene = sceneRef.current;
@@ -627,37 +778,50 @@ export default function SpatialRenderer({
     engine.setHardwareScalingLevel(1 / profile.resolutionScale);
     setEffectiveScale(profile.resolutionScale);
     if (glowRef.current) glowRef.current.intensity = settingsRef.current.glowIntensity * profile.bloomScale;
-
-    const camera = cameraRef.current;
-    if (camera) {
-      desiredRadiusRef.current = workspace.cameraRadius;
-      if (!selectedNodeIdRef.current) cameraTargetRef.current = Vector3.Zero();
-    }
   };
 
   useEffect(() => {
     rebuild();
-    // Rebuild uses refs deliberately so scene initialization and React updates share one projection path.
+    // Refs keep Babylon scene ownership outside React while this effect controls projection invalidation.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [graph, workspaceId, settings.renderQuality, settings.themeId, settings.graphDensity, settings.labelDensity, settings.edgeIntensity, settings.ambientParticles, phase]);
 
   useEffect(() => {
+    rebuildGpuField();
+    // GPU signal storage only needs recreation when capacity/material calibration changes.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [settings.renderQuality, settings.themeId, settings.ambientParticles]);
+
+  useEffect(() => {
+    const director = cameraDirectorRef.current;
+    if (!director) return;
+    director.setWorkspace(activeWorkspace);
+    setCameraMode(activeWorkspace.preferredCamera);
+  }, [activeWorkspace]);
+
+  useEffect(() => {
     const projection = projectionRef.current;
+    const director = cameraDirectorRef.current;
     selectedNodeIdRef.current = selectedNodeId;
     if (!projection || !selectedNodeId) {
       if (projection) projection.focusHalo.isVisible = false;
-      if (!selectedNodeId) cameraTargetRef.current = Vector3.Zero();
+      if (director?.currentMode === "FOCUS") {
+        director.setMode(activeWorkspace.preferredCamera, activeWorkspace);
+        setCameraMode(activeWorkspace.preferredCamera);
+      }
       return;
     }
+
     const position = projection.positions.get(selectedNodeId);
     if (!position) return;
-    cameraTargetRef.current = position.clone();
-    desiredRadiusRef.current = Math.max(4.2, Math.min(7.5, activeWorkspace.cameraRadius * 0.34));
+    const focusRadius = Math.max(4.2, Math.min(7.5, activeWorkspace.cameraRadius * 0.34));
+    director?.focus(position, focusRadius);
+    setCameraMode("FOCUS");
     const size = projection.sizes.get(selectedNodeId) ?? 0.4;
     projection.focusHalo.position.copyFrom(position);
     projection.focusHalo.scaling.setAll(Math.max(0.72, size * 1.7));
     projection.focusHalo.isVisible = true;
-  }, [selectedNodeId, activeWorkspace.cameraRadius]);
+  }, [selectedNodeId, activeWorkspace]);
 
   useEffect(() => {
     const canvas = canvasRef.current;
@@ -675,6 +839,7 @@ export default function SpatialRenderer({
       }
 
       engineRef.current = created.engine;
+      backendRef.current = created.backend;
       setBackend(created.backend);
       const scene = new Scene(created.engine);
       sceneRef.current = scene;
@@ -685,21 +850,26 @@ export default function SpatialRenderer({
       scene.fogColor = canvasColor;
       scene.fogDensity = workspaceById(workspaceIdRef.current).fogDensity * settingsRef.current.depthFog;
 
+      const workspace = workspaceById(workspaceIdRef.current);
       const camera = new ArcRotateCamera(
         "os-spatial-camera",
         -Math.PI / 2,
         Math.PI / 2.34,
-        workspaceById(workspaceIdRef.current).cameraRadius,
+        workspace.cameraRadius,
         Vector3.Zero(),
         scene,
       );
       cameraRef.current = camera;
       camera.lowerRadiusLimit = 2.8;
       camera.upperRadiusLimit = 90;
+      camera.lowerBetaLimit = 0.18;
+      camera.upperBetaLimit = Math.PI - 0.18;
       camera.wheelPrecision = 22;
       camera.panningSensibility = 105;
       camera.inertia = 0.84;
       camera.attachControl(canvas, true);
+      cameraDirectorRef.current = new CameraDirector(workspace);
+      setCameraMode(workspace.preferredCamera);
 
       const light = new HemisphericLight("os-ambient-light", new Vector3(0.2, 1, 0.15), scene);
       light.intensity = 0.34;
@@ -712,6 +882,7 @@ export default function SpatialRenderer({
       glow.intensity = settingsRef.current.glowIntensity * profile.bloomScale;
 
       projectionRef.current = makeProjection(scene, graphRef.current, workspaceIdRef.current, settingsRef.current, phaseRef.current);
+      rebuildGpuField();
 
       pointerObserver = scene.onPointerObservable.add((pointerInfo) => {
         const pickedMesh = pointerInfo.pickInfo?.pickedMesh as Mesh | null | undefined;
@@ -741,7 +912,8 @@ export default function SpatialRenderer({
         }
 
         if (pointerInfo.type === PointerEventTypes.POINTERWHEEL || pointerInfo.type === PointerEventTypes.POINTERDOWN) {
-          desiredRadiusRef.current = null;
+          cameraDirectorRef.current?.userControl();
+          setCameraMode("FREE");
         }
 
         if (pointerInfo.type !== PointerEventTypes.POINTERPICK) return;
@@ -750,14 +922,19 @@ export default function SpatialRenderer({
           const node = projectionRef.current?.nodeById.get(nodeId) ?? null;
           if (node) {
             const position = projectionRef.current?.positions.get(node.id);
-            if (position) cameraTargetRef.current = position.clone();
-            desiredRadiusRef.current = Math.max(4.2, Math.min(7.5, workspaceById(workspaceIdRef.current).cameraRadius * 0.34));
+            if (position) {
+              const radius = Math.max(4.2, Math.min(7.5, workspaceById(workspaceIdRef.current).cameraRadius * 0.34));
+              cameraDirectorRef.current?.focus(position, radius);
+              setCameraMode("FOCUS");
+            }
             onSelectNodeRef.current(node);
             return;
           }
         }
         onSelectNodeRef.current(null);
-        cameraTargetRef.current = Vector3.Zero();
+        const currentWorkspace = workspaceById(workspaceIdRef.current);
+        cameraDirectorRef.current?.overview(currentWorkspace);
+        setCameraMode("OVERVIEW");
       });
 
       scene.onBeforeRenderObservable.add(() => {
@@ -778,11 +955,19 @@ export default function SpatialRenderer({
           setZoomLevel(nextZoom);
         }
 
-        if (!selectedNodeIdRef.current && motion > 0) camera.alpha += currentWorkspace.orbitalVelocity * motion;
-        Vector3.LerpToRef(camera.target, cameraTargetRef.current, currentSettings.reducedMotion ? 0.24 : 0.075, camera.target);
-        if (desiredRadiusRef.current !== null) {
-          camera.radius += (desiredRadiusRef.current - camera.radius) * (currentSettings.reducedMotion ? 0.3 : 0.085);
-          if (Math.abs(desiredRadiusRef.current - camera.radius) < 0.04) desiredRadiusRef.current = null;
+        cameraDirectorRef.current?.tick(
+          camera,
+          currentWorkspace,
+          time,
+          motion,
+          currentSettings.reducedMotion,
+          activityRef.current,
+        );
+
+        const gpuField = gpuFieldRef.current;
+        if (gpuField) {
+          gpuField.setVisible(nextZoom !== "inspect" && currentSettings.ambientParticles > 0.02);
+          gpuField.tick(currentSettings.reducedMotion ? 0 : time, activityRef.current, motion, workspaceIdRef.current);
         }
 
         if (projection) {
@@ -866,6 +1051,8 @@ export default function SpatialRenderer({
       window.removeEventListener("resize", resize);
       const scene = sceneRef.current;
       if (scene && pointerObserver) scene.onPointerObservable.remove(pointerObserver);
+      gpuFieldRef.current?.dispose();
+      gpuFieldRef.current = null;
       disposeProjection(projectionRef.current);
       projectionRef.current = null;
       glowRef.current?.dispose();
@@ -875,8 +1062,33 @@ export default function SpatialRenderer({
       engineRef.current?.dispose();
       engineRef.current = null;
       cameraRef.current = null;
+      cameraDirectorRef.current = null;
     };
   }, []);
+
+  const selectCameraMode = (mode: CameraMode) => {
+    const director = cameraDirectorRef.current;
+    if (!director) return;
+    const workspace = workspaceById(workspaceIdRef.current);
+    const projection = projectionRef.current;
+    const selectedId = selectedNodeIdRef.current;
+    const selectedPosition = selectedId ? projection?.positions.get(selectedId) : null;
+    const focusRadius = Math.max(4.2, Math.min(7.5, workspace.cameraRadius * 0.34));
+
+    if (mode === "OVERVIEW") {
+      director.overview(workspace);
+      onSelectNodeRef.current(null);
+    } else if (mode === "FOCUS" && selectedPosition) {
+      director.focus(selectedPosition, focusRadius);
+    } else if (mode === "FOLLOW" && selectedPosition) {
+      director.follow(selectedPosition, Math.max(6.2, focusRadius * 1.34));
+    } else if (mode === "FREE") {
+      director.userControl();
+    } else {
+      director.setMode(mode, workspace);
+    }
+    setCameraMode(mode);
+  };
 
   return (
     <>
@@ -887,18 +1099,28 @@ export default function SpatialRenderer({
           <strong>{zoomLevel.toUpperCase()}</strong>
         </div>
         <div className="spatial-cluster">
-          <span>CAMERA</span>
-          <strong>{activeWorkspace.preferredCamera}</strong>
-          <small>{backend} · {effectiveScale.toFixed(2)}× · {measuredFps} FPS</small>
+          <span>RENDER FABRIC</span>
+          <strong>{gpuTier === "WEBGPU_COMPUTE" ? "GPU COMPUTE" : "BATCHED"}</strong>
+          <small>{backend} · {gpuSignals.toLocaleString()} SIG · {effectiveScale.toFixed(2)}× · {measuredFps} FPS</small>
+        </div>
+        <div className="camera-mode-strip" aria-label="Spatial camera mode">
+          {CAMERA_MODES.map((mode) => (
+            <button
+              type="button"
+              key={mode}
+              className={cameraMode === mode ? "active" : ""}
+              onClick={() => selectCameraMode(mode)}
+              title={`${mode} camera mode`}
+            >
+              {mode.slice(0, 3)}
+            </button>
+          ))}
         </div>
         {selectedNodeId && (
           <button
             type="button"
-            onClick={() => {
-              onSelectNodeRef.current(null);
-              cameraTargetRef.current = Vector3.Zero();
-              desiredRadiusRef.current = activeWorkspace.cameraRadius;
-            }}
+            className="spatial-overview-button"
+            onClick={() => selectCameraMode("OVERVIEW")}
           >
             OVERVIEW
           </button>
