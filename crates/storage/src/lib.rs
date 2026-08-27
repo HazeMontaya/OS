@@ -4,7 +4,7 @@ use os_contracts::{
     CognitiveEvent, EntityRecord, FactRecord, MemoryKind, MemoryRecord, RelationshipRecord,
     Sensitivity,
 };
-use rusqlite::{params, Connection};
+use rusqlite::{Connection, params};
 use thiserror::Error;
 
 const MIGRATION_0001: &str = include_str!("../migrations/0001_init.sql");
@@ -294,7 +294,16 @@ impl Storage {
 
         let mut entities = Vec::new();
         for row in rows {
-            let (entity_id, kind, canonical_label, aliases, confidence, first_seen_ms, last_seen_ms, provenance) = row?;
+            let (
+                entity_id,
+                kind,
+                canonical_label,
+                aliases,
+                confidence,
+                first_seen_ms,
+                last_seen_ms,
+                provenance,
+            ) = row?;
             entities.push(EntityRecord {
                 entity_id,
                 kind,
@@ -331,7 +340,17 @@ impl Storage {
 
         let mut relationships = Vec::new();
         for row in rows {
-            let (edge_id, from_entity_id, to_entity_id, relation, weight, confidence, valid_from_ms, valid_until_ms, provenance) = row?;
+            let (
+                edge_id,
+                from_entity_id,
+                to_entity_id,
+                relation,
+                weight,
+                confidence,
+                valid_from_ms,
+                valid_until_ms,
+                provenance,
+            ) = row?;
             relationships.push(RelationshipRecord {
                 edge_id,
                 from_entity_id,
@@ -368,7 +387,16 @@ impl Storage {
 
         let mut memories = Vec::new();
         for row in rows {
-            let (id, kind, text, relevance, confidence, first_seen_ms, last_confirmed_ms, provenance) = row?;
+            let (
+                id,
+                kind,
+                text,
+                relevance,
+                confidence,
+                first_seen_ms,
+                last_confirmed_ms,
+                provenance,
+            ) = row?;
             memories.push(MemoryRecord {
                 id,
                 kind: parse_memory_kind(&kind)?,
@@ -456,7 +484,9 @@ fn parse_memory_kind(value: &str) -> Result<MemoryKind> {
         "project" => Ok(MemoryKind::Project),
         "self_model" => Ok(MemoryKind::SelfModel),
         "world_model" => Ok(MemoryKind::WorldModel),
-        other => Err(StorageError::InvalidData(format!("unknown memory kind '{other}'"))),
+        other => Err(StorageError::InvalidData(format!(
+            "unknown memory kind '{other}'"
+        ))),
     }
 }
 
@@ -510,7 +540,9 @@ mod tests {
             provenance: vec!["event-1".into()],
         };
         storage.upsert_entity(&user).expect("user entity");
-        storage.upsert_entity(&memory_entity).expect("memory entity");
+        storage
+            .upsert_entity(&memory_entity)
+            .expect("memory entity");
         storage
             .insert_relationship(&RelationshipRecord {
                 edge_id: "edge-1".into(),
@@ -538,10 +570,15 @@ mod tests {
             .expect("memory");
 
         assert_eq!(storage.load_entities().expect("entities").len(), 2);
-        assert_eq!(storage.load_relationships().expect("relationships").len(), 1);
+        assert_eq!(
+            storage.load_relationships().expect("relationships").len(),
+            1
+        );
         assert_eq!(storage.load_memories().expect("memories").len(), 1);
         assert_eq!(
-            storage.search_memory_ids("cognitive", 5).expect("memory search"),
+            storage
+                .search_memory_ids("cognitive", 5)
+                .expect("memory search"),
             vec!["memory:1".to_string()]
         );
     }
