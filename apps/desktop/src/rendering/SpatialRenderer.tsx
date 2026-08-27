@@ -40,6 +40,7 @@ import type {
 import type { OsSettings } from "../settings/useOsSettings";
 import { CameraDirector } from "./CameraDirector";
 import { GpuSignalField } from "./GpuSignalField";
+import { classifyProjectionDelta, graphTopologySignature } from "./ProjectionDelta";
 
 type Props = {
   graph: GraphSnapshot;
@@ -66,16 +67,22 @@ type TraceRoute = {
 };
 
 type VisualProjection = {
+  topologySignature: string;
   root: TransformNode;
   resources: Array<{ dispose: () => void }>;
+  traceResources: Array<{ dispose: () => void }>;
   positions: Map<string, Vector3>;
   sizes: Map<string, number>;
   nodeById: Map<string, CognitiveNode>;
+  visibleNodeIds: string[];
+  nodeSystem: SolidParticleSystem;
   labels: Mesh[];
+  labelByNodeId: Map<string, Mesh>;
   clusterMeshes: Mesh[];
   clusterLabels: Mesh[];
   edgeMeshes: Mesh[];
   pickMeshes: Mesh[];
+  pickByNodeId: Map<string, Mesh>;
   nodeMesh: Mesh | null;
   ambientMesh: Mesh | null;
   traceMesh: Mesh | null;
@@ -378,7 +385,7 @@ function makeProjection(
   graph: GraphSnapshot,
   workspaceId: WorkspaceId,
   settings: OsSettings,
-  phase: CognitiveActivityPhase | null,
+  topologySignature: string,
 ): VisualProjection {
   const profile = RENDER_PROFILES[settings.renderQuality];
   const budget = resolveRenderBudget(profile, settings.graphDensity, settings.labelDensity, settings.ambientParticles);
@@ -394,8 +401,9 @@ function makeProjection(
     .sort((left, right) => nodePriority(right, workspaceId) - nodePriority(left, workspaceId) || left.id.localeCompare(right.id))
     .slice(0, budget.nodes);
 
+  const visibleNodeIds = visibleNodes.map((node) => node.id);
   const nodeById = new Map(visibleNodes.map((node) => [node.id, node]));
-  const visibleIds = new Set(nodeById.keys());
+  const visibleIds = new Set(visibleNodeIds);
   const kindIndexes = new Map<string, number>();
   const positions = new Map<string, Vector3>();
   const sizes = new Map<string, number>();
@@ -456,11 +464,7 @@ function makeProjection(
   const historicalLines: Vector3[][] = [];
   const visibleEdges = graph.edges
     .filter((edge) => visibleIds.has(edge.from) && visibleIds.has(edge.to))
-    .sort((left, right) => {
-      const leftActive = edgeParticipates(left, nodeById, phase) ? 1 : 0;
-      const rightActive = edgeParticipates(right, nodeById, phase) ? 1 : 0;
-      return rightActive - leftActive || right.weight - left.weight;
-    })
+    .sort((left, right) => right.weight - left.weight || left.id.localeCompare(right.id))
     .slice(0, budget.edges);
 
   for (const edge of visibleEdges) {
@@ -510,6 +514,7 @@ function makeProjection(
   }
 
   const labels: Mesh[] = [];
+  const labelByNodeId = new Map<string, Mesh>();
   const labelNodes = visibleNodes
     .filter((node) => node.kind !== "self_model")
     .sort((left, right) => nodePriority(right, workspaceId) - nodePriority(left, workspaceId))
@@ -517,10 +522,13 @@ function makeProjection(
   for (const node of labelNodes) {
     const position = positions.get(node.id);
     if (!position) continue;
-    labels.push(createLabel(scene, root, resources, node.label, position, parseHex(semanticHex(node.kind)), `node:${node.id}`, clamp01(node.importance), "node"));
+    const label = createLabel(scene, root, resources, node.label, position, parseHex(semanticHex(node.kind)), `node:${node.id}`, clamp01(node.importance), "node");
+    labels.push(label);
+    labelByNodeId.set(node.id, label);
   }
 
   const pickMeshes: Mesh[] = [];
+  const pickByNodeId = new Map<string, Mesh>();
   const pickMaterial = new StandardMaterial("os-pick-material", scene);
   pickMaterial.alpha = 0;
   pickMaterial.disableLighting = true;
@@ -534,8 +542,9 @@ function makeProjection(
     proxy.position.copyFrom(position);
     proxy.material = pickMaterial;
     proxy.isPickable = true;
-    proxy.metadata = { osPickNode: true, nodeId: node.id };
+    proxy.metadata = { osPickNode: true, nodeId: node.id, baseSize: size };
     pickMeshes.push(proxy);
+    pickByNodeId.set(node.id, proxy);
   }
 
   const ambientCount = Math.min(MAX_AMBIENT_SIGNALS, budget.ambientSignals);
@@ -575,47 +584,6 @@ function makeProjection(
     resources.push(ambientSystem);
   }
 
-  const activeRoutes = visibleEdges
-    .filter((edge) => edgeParticipates(edge, nodeById, phase))
-    .slice(0, MAX_TRACE_PACKETS)
-    .flatMap((edge) => {
-      const from = positions.get(edge.from);
-      const to = positions.get(edge.to);
-      return from && to ? [{ from: from.clone(), to: to.clone(), offset: hashUnit(edge.id) }] : [];
-    });
-
-  let traceSystem: SolidParticleSystem | null = null;
-  let traceMesh: Mesh | null = null;
-  if (activeRoutes.length > 0) {
-    const traceShape = MeshBuilder.CreateSphere("os-trace-shape", { diameter: 0.11, segments: 5 }, scene);
-    traceShape.isVisible = false;
-    traceSystem = new SolidParticleSystem("os-trace-sps", scene, { isPickable: false });
-    traceSystem.addShape(traceShape, activeRoutes.length);
-    traceShape.dispose();
-    traceSystem.buildMesh();
-    traceSystem.computeParticleRotation = false;
-    traceSystem.computeParticleColor = true;
-    activeRoutes.forEach((route, index) => {
-      const particle = traceSystem?.particles[index];
-      if (!particle) return;
-      particle.position.copyFrom(route.from);
-      particle.color = new Color4(goldBright.r, goldBright.g, goldBright.b, 0.96);
-    });
-    traceSystem.setParticles();
-    traceMesh = traceSystem.mesh;
-    if (traceMesh) {
-      traceMesh.parent = root;
-      traceMesh.hasVertexAlpha = true;
-      const material = new StandardMaterial("os-trace-material", scene);
-      material.emissiveColor = goldBright;
-      material.diffuseColor = gold.scale(0.1);
-      material.alpha = 0.96;
-      traceMesh.material = material;
-      resources.push(material);
-    }
-    resources.push(traceSystem);
-  }
-
   const coreRings: Mesh[] = [];
   const coreMaterial = new StandardMaterial("os-core-material", scene);
   coreMaterial.emissiveColor = goldBright.scale(0.88);
@@ -644,28 +612,135 @@ function makeProjection(
   focusHalo.isVisible = false;
 
   return {
+    topologySignature,
     root,
     resources,
+    traceResources: [],
     positions,
     sizes,
     nodeById,
+    visibleNodeIds,
+    nodeSystem,
     labels,
+    labelByNodeId,
     clusterMeshes,
     clusterLabels,
     edgeMeshes,
     pickMeshes,
+    pickByNodeId,
     nodeMesh,
     ambientMesh,
-    traceMesh,
-    traceSystem,
-    traceRoutes: activeRoutes,
+    traceMesh: null,
+    traceSystem: null,
+    traceRoutes: [],
     coreRings,
     focusHalo,
   };
 }
 
+function disposeTraceLayer(projection: VisualProjection) {
+  for (const resource of projection.traceResources) {
+    try { resource.dispose(); } catch { /* Defensive teardown for Babylon trace resources. */ }
+  }
+  projection.traceResources = [];
+  projection.traceMesh = null;
+  projection.traceSystem = null;
+  projection.traceRoutes = [];
+}
+
+function refreshTraceLayer(
+  scene: Scene,
+  projection: VisualProjection,
+  graph: GraphSnapshot,
+  phase: CognitiveActivityPhase | null,
+  settings: OsSettings,
+) {
+  disposeTraceLayer(projection);
+  if (!phase) return;
+
+  const theme = getTheme(settings.themeId);
+  const gold = parseHex(theme.gold);
+  const goldBright = parseHex(theme.goldBright);
+  const visibleIds = new Set(projection.visibleNodeIds);
+  const activeRoutes = graph.edges
+    .filter((edge) => visibleIds.has(edge.from) && visibleIds.has(edge.to))
+    .filter((edge) => edgeParticipates(edge, projection.nodeById, phase))
+    .sort((left, right) => right.weight - left.weight || left.id.localeCompare(right.id))
+    .slice(0, MAX_TRACE_PACKETS)
+    .flatMap((edge) => {
+      const from = projection.positions.get(edge.from);
+      const to = projection.positions.get(edge.to);
+      return from && to ? [{ from: from.clone(), to: to.clone(), offset: hashUnit(edge.id) }] : [];
+    });
+
+  if (activeRoutes.length === 0) return;
+
+  const traceShape = MeshBuilder.CreateSphere("os-trace-shape", { diameter: 0.11, segments: 5 }, scene);
+  traceShape.isVisible = false;
+  const traceSystem = new SolidParticleSystem("os-trace-sps", scene, { isPickable: false });
+  traceSystem.addShape(traceShape, activeRoutes.length);
+  traceShape.dispose();
+  traceSystem.buildMesh();
+  traceSystem.computeParticleRotation = false;
+  traceSystem.computeParticleColor = true;
+  activeRoutes.forEach((route, index) => {
+    const particle = traceSystem.particles[index];
+    particle.position.copyFrom(route.from);
+    particle.color = new Color4(goldBright.r, goldBright.g, goldBright.b, 0.96);
+  });
+  traceSystem.setParticles();
+
+  const traceMesh = traceSystem.mesh;
+  if (traceMesh) {
+    traceMesh.parent = projection.root;
+    traceMesh.hasVertexAlpha = true;
+    const material = new StandardMaterial("os-trace-material", scene);
+    material.emissiveColor = goldBright;
+    material.diffuseColor = gold.scale(0.1);
+    material.alpha = 0.96;
+    traceMesh.material = material;
+    projection.traceResources.push(material);
+  }
+  projection.traceResources.push(traceSystem);
+  projection.traceSystem = traceSystem;
+  projection.traceMesh = traceMesh;
+  projection.traceRoutes = activeRoutes;
+}
+
+function updateProjectionMutableState(projection: VisualProjection, graph: GraphSnapshot) {
+  const latestNodes = new Map(graph.nodes.map((node) => [node.id, node]));
+  let particleChanged = false;
+
+  projection.visibleNodeIds.forEach((nodeId, index) => {
+    const node = latestNodes.get(nodeId);
+    const particle = projection.nodeSystem.particles[index];
+    if (!node || !particle) return;
+
+    projection.nodeById.set(nodeId, node);
+    const nextSize = nodeVisualSize(node);
+    projection.sizes.set(nodeId, nextSize);
+    particle.scaling.setAll(nextSize);
+    const confidence = clamp01(node.confidence);
+    particle.color = semanticColor(node.kind, 0.48 + confidence * 0.5);
+    particleChanged = true;
+
+    const label = projection.labelByNodeId.get(nodeId);
+    if (label?.metadata) label.metadata.importance = clamp01(node.importance);
+
+    const pick = projection.pickByNodeId.get(nodeId);
+    if (pick) {
+      const baseSize = Number(pick.metadata?.baseSize ?? nextSize);
+      const relativeScale = Math.max(0.72, Math.min(1.75, nextSize / Math.max(0.01, baseSize)));
+      pick.scaling.setAll(relativeScale);
+    }
+  });
+
+  if (particleChanged) projection.nodeSystem.setParticles();
+}
+
 function disposeProjection(projection: VisualProjection | null) {
   if (!projection) return;
+  disposeTraceLayer(projection);
   projection.root.dispose(false);
   for (const resource of projection.resources) {
     try { resource.dispose(); } catch { /* Defensive teardown for Babylon resources. */ }
@@ -691,6 +766,8 @@ export default function SpatialRenderer({
   const gpuFieldRef = useRef<GpuSignalField | null>(null);
   const backendRef = useRef<RenderBackend>("WEBGL");
   const graphRef = useRef(graph);
+  const previousGraphRef = useRef<GraphSnapshot | null>(null);
+  const previousTopologyRef = useRef<string | null>(null);
   const activityRef = useRef(activity);
   const phaseRef = useRef(phase);
   const workspaceIdRef = useRef(workspaceId);
@@ -711,10 +788,28 @@ export default function SpatialRenderer({
   const [cameraMode, setCameraMode] = useState<CameraMode>(workspaceById(workspaceId).preferredCamera);
   const [measuredFps, setMeasuredFps] = useState(0);
   const [effectiveScale, setEffectiveScale] = useState(effectiveScaleRef.current);
+  const [rebuildCount, setRebuildCount] = useState(0);
+  const [mutableUpdateCount, setMutableUpdateCount] = useState(0);
 
   const activeWorkspace = useMemo(() => workspaceById(workspaceId), [workspaceId]);
+  const topologySignature = useMemo(() => graphTopologySignature(graph), [graph]);
 
-  useEffect(() => { graphRef.current = graph; }, [graph]);
+  useEffect(() => {
+    graphRef.current = graph;
+    const delta = classifyProjectionDelta(
+      previousGraphRef.current,
+      graph,
+      previousTopologyRef.current,
+      topologySignature,
+    );
+    const projection = projectionRef.current;
+    if (delta === "MUTABLE_STATE" && projection?.topologySignature === topologySignature) {
+      updateProjectionMutableState(projection, graph);
+      setMutableUpdateCount((count) => count + 1);
+    }
+    previousGraphRef.current = graph;
+    previousTopologyRef.current = topologySignature;
+  }, [graph, topologySignature]);
   useEffect(() => { activityRef.current = activity; }, [activity]);
   useEffect(() => { phaseRef.current = phase; }, [phase]);
   useEffect(() => { workspaceIdRef.current = workspaceId; }, [workspaceId]);
@@ -764,7 +859,11 @@ export default function SpatialRenderer({
     if (!scene || !engine) return;
 
     disposeProjection(projectionRef.current);
-    projectionRef.current = makeProjection(scene, graphRef.current, workspaceIdRef.current, settingsRef.current, phaseRef.current);
+    const signature = graphTopologySignature(graphRef.current);
+    const projection = makeProjection(scene, graphRef.current, workspaceIdRef.current, settingsRef.current, signature);
+    projectionRef.current = projection;
+    refreshTraceLayer(scene, projection, graphRef.current, phaseRef.current, settingsRef.current);
+    setRebuildCount((count) => count + 1);
 
     const workspace = workspaceById(workspaceIdRef.current);
     scene.fogDensity = workspace.fogDensity * settingsRef.current.depthFog;
@@ -782,9 +881,23 @@ export default function SpatialRenderer({
 
   useEffect(() => {
     rebuild();
-    // Refs keep Babylon scene ownership outside React while this effect controls projection invalidation.
+    // Topology, workspace identity and capacity/material changes are the only full reconstruction gates.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [graph, workspaceId, settings.renderQuality, settings.themeId, settings.graphDensity, settings.labelDensity, settings.edgeIntensity, settings.ambientParticles, phase]);
+  }, [topologySignature, workspaceId, settings.renderQuality, settings.themeId, settings.graphDensity, settings.labelDensity, settings.edgeIntensity, settings.ambientParticles]);
+
+  useEffect(() => {
+    const scene = sceneRef.current;
+    const projection = projectionRef.current;
+    if (!scene || !projection) return;
+    refreshTraceLayer(scene, projection, graphRef.current, phase, settingsRef.current);
+  }, [phase]);
+
+  useEffect(() => {
+    const scene = sceneRef.current;
+    if (scene) scene.fogDensity = activeWorkspace.fogDensity * settings.depthFog;
+    const profile = RENDER_PROFILES[settings.renderQuality];
+    if (glowRef.current) glowRef.current.intensity = settings.glowIntensity * profile.bloomScale;
+  }, [activeWorkspace, settings.depthFog, settings.glowIntensity, settings.renderQuality]);
 
   useEffect(() => {
     rebuildGpuField();
@@ -881,7 +994,11 @@ export default function SpatialRenderer({
       const profile = RENDER_PROFILES[settingsRef.current.renderQuality];
       glow.intensity = settingsRef.current.glowIntensity * profile.bloomScale;
 
-      projectionRef.current = makeProjection(scene, graphRef.current, workspaceIdRef.current, settingsRef.current, phaseRef.current);
+      const initialSignature = graphTopologySignature(graphRef.current);
+      const projection = makeProjection(scene, graphRef.current, workspaceIdRef.current, settingsRef.current, initialSignature);
+      projectionRef.current = projection;
+      refreshTraceLayer(scene, projection, graphRef.current, phaseRef.current, settingsRef.current);
+      setRebuildCount((count) => count + 1);
       rebuildGpuField();
 
       pointerObserver = scene.onPointerObservable.add((pointerInfo) => {
@@ -944,7 +1061,7 @@ export default function SpatialRenderer({
         if (now - lastRenderRef.current < frameInterval * 0.82) return;
         lastRenderRef.current = now;
 
-        const projection = projectionRef.current;
+        const currentProjection = projectionRef.current;
         const currentWorkspace = workspaceById(workspaceIdRef.current);
         const motion = currentSettings.reducedMotion ? 0 : currentSettings.animationIntensity;
         const time = now * 0.001;
@@ -970,25 +1087,25 @@ export default function SpatialRenderer({
           gpuField.tick(currentSettings.reducedMotion ? 0 : time, activityRef.current, motion, workspaceIdRef.current);
         }
 
-        if (projection) {
+        if (currentProjection) {
           const showClusters = nextZoom === "universe" || nextZoom === "cluster";
           const showNodes = nextZoom !== "universe";
           const showEdges = nextZoom === "network" || nextZoom === "detail" || nextZoom === "inspect";
-          if (projection.nodeMesh) projection.nodeMesh.isVisible = showNodes;
-          for (const mesh of projection.clusterMeshes) mesh.isVisible = showClusters;
-          for (const mesh of projection.clusterLabels) mesh.isVisible = showClusters;
-          for (const mesh of projection.edgeMeshes) mesh.isVisible = showEdges;
-          for (const mesh of projection.labels) {
+          if (currentProjection.nodeMesh) currentProjection.nodeMesh.isVisible = showNodes;
+          for (const mesh of currentProjection.clusterMeshes) mesh.isVisible = showClusters;
+          for (const mesh of currentProjection.clusterLabels) mesh.isVisible = showClusters;
+          for (const mesh of currentProjection.edgeMeshes) mesh.isVisible = showEdges;
+          for (const mesh of currentProjection.labels) {
             const importance = Number(mesh.metadata?.importance ?? 0);
             mesh.isVisible = nextZoom === "detail" || nextZoom === "inspect" || (nextZoom === "network" && importance >= 0.74);
           }
 
-          if (projection.nodeMesh && motion > 0) projection.nodeMesh.rotation.y += 0.000025 * motion;
-          if (projection.ambientMesh && motion > 0) {
-            projection.ambientMesh.rotation.y -= 0.000035 * motion;
-            projection.ambientMesh.rotation.x = Math.sin(time * 0.07) * 0.015;
+          if (currentProjection.nodeMesh && motion > 0) currentProjection.nodeMesh.rotation.y += 0.000025 * motion;
+          if (currentProjection.ambientMesh && motion > 0) {
+            currentProjection.ambientMesh.rotation.y -= 0.000035 * motion;
+            currentProjection.ambientMesh.rotation.x = Math.sin(time * 0.07) * 0.015;
           }
-          projection.coreRings.forEach((ring, index) => {
+          currentProjection.coreRings.forEach((ring, index) => {
             const direction = index % 2 === 0 ? 1 : -1;
             ring.rotation.z += direction * 0.0008 * motion;
             ring.rotation.y += direction * 0.00045 * motion;
@@ -996,23 +1113,23 @@ export default function SpatialRenderer({
             ring.scaling.setAll(pulse);
           });
 
-          if (projection.focusHalo.isVisible) {
-            projection.focusHalo.rotation.z += 0.0035 * Math.max(0.25, motion);
+          if (currentProjection.focusHalo.isVisible) {
+            currentProjection.focusHalo.rotation.z += 0.0035 * Math.max(0.25, motion);
             const pulse = 1 + Math.sin(time * 3.4) * 0.055 * Math.max(0.2, motion);
             const base = selectedNodeIdRef.current
-              ? Math.max(0.72, (projection.sizes.get(selectedNodeIdRef.current) ?? 0.4) * 1.7)
-              : Math.max(0.68, (projection.sizes.get(hoverNodeIdRef.current ?? "") ?? 0.4) * 1.55);
-            projection.focusHalo.scaling.setAll(base * pulse);
+              ? Math.max(0.72, (currentProjection.sizes.get(selectedNodeIdRef.current) ?? 0.4) * 1.7)
+              : Math.max(0.68, (currentProjection.sizes.get(hoverNodeIdRef.current ?? "") ?? 0.4) * 1.55);
+            currentProjection.focusHalo.scaling.setAll(base * pulse);
           }
 
-          if (projection.traceSystem && projection.traceRoutes.length > 0 && motion > 0) {
-            projection.traceRoutes.forEach((route, index) => {
-              const particle = projection.traceSystem?.particles[index];
+          if (currentProjection.traceSystem && currentProjection.traceRoutes.length > 0 && motion > 0) {
+            currentProjection.traceRoutes.forEach((route, index) => {
+              const particle = currentProjection.traceSystem?.particles[index];
               if (!particle) return;
               const progress = (time * (0.38 + motion * 0.24) + route.offset) % 1;
               Vector3.LerpToRef(route.from, route.to, progress, particle.position);
             });
-            projection.traceSystem.setParticles();
+            currentProjection.traceSystem.setParticles();
           }
         }
 
@@ -1101,7 +1218,7 @@ export default function SpatialRenderer({
         <div className="spatial-cluster">
           <span>RENDER FABRIC</span>
           <strong>{gpuTier === "WEBGPU_COMPUTE" ? "GPU COMPUTE" : "BATCHED"}</strong>
-          <small>{backend} · {gpuSignals.toLocaleString()} SIG · {effectiveScale.toFixed(2)}× · {measuredFps} FPS</small>
+          <small>{backend} · {gpuSignals.toLocaleString()} SIG · {effectiveScale.toFixed(2)}× · {measuredFps} FPS · R{rebuildCount}/Δ{mutableUpdateCount}</small>
         </div>
         <div className="camera-mode-strip" aria-label="Spatial camera mode">
           {CAMERA_MODES.map((mode) => (
