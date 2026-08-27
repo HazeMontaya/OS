@@ -2,6 +2,7 @@ import { FormEvent, useEffect, useState } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import CognitiveVoid from "./CognitiveVoid";
 import {
+  AskResult,
   emptyGraph,
   emptySystemSnapshot,
   GraphSnapshot,
@@ -12,6 +13,9 @@ export default function App() {
   const [snapshot, setSnapshot] = useState<SystemSnapshot>(emptySystemSnapshot);
   const [graph, setGraph] = useState<GraphSnapshot>(emptyGraph);
   const [input, setInput] = useState("");
+  const [answer, setAnswer] = useState<AskResult | null>(null);
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
 
   const refresh = async () => {
     try {
@@ -34,15 +38,32 @@ export default function App() {
   const submit = async (event: FormEvent) => {
     event.preventDefault();
     const content = input.trim();
-    if (!content) return;
-    await invoke("ingest_event", { content });
+    if (!content || busy) return;
+
+    setBusy(true);
+    setError(null);
+    setAnswer(null);
     setInput("");
-    await refresh();
+
+    try {
+      const result = await invoke<AskResult>("ask", { content });
+      setAnswer(result);
+    } catch (cause) {
+      setError(String(cause));
+    } finally {
+      await refresh();
+      setBusy(false);
+    }
   };
+
+  const activePanel = busy || answer !== null || error !== null;
 
   return (
     <main className="shell">
-      <CognitiveVoid graph={graph} activity={snapshot.event_count} />
+      <CognitiveVoid
+        graph={graph}
+        activity={snapshot.event_count + (busy ? 1 : 0)}
+      />
 
       <header className="topbar glass">
         <div>
@@ -61,13 +82,45 @@ export default function App() {
         </div>
       </header>
 
-      <section className="focus-copy">
-        <p className="eyebrow">ACTIVE CONTEXT</p>
-        <h1>Cognition is the interface.</h1>
-        <p>
-          Memory, knowledge, agents, tools and execution traces become one navigable state model.
-        </p>
-      </section>
+      {!activePanel && (
+        <section className="focus-copy">
+          <p className="eyebrow">ACTIVE CONTEXT</p>
+          <h1>Cognition is the interface.</h1>
+          <p>
+            Memory, knowledge, agents, tools and execution traces become one navigable state model.
+          </p>
+        </section>
+      )}
+
+      {activePanel && (
+        <section className="response-panel glass" aria-live="polite">
+          <header>
+            <span className="eyebrow">COGNITIVE OUTPUT</span>
+            <span className="response-meta">
+              {busy ? "LOCAL INFERENCE" : answer?.model ?? "MODEL ERROR"}
+            </span>
+          </header>
+
+          {busy && (
+            <div className="thinking-state">
+              <span className="thinking-orbit" />
+              <p>Retrieving memory and reasoning locally…</p>
+            </div>
+          )}
+
+          {!busy && error && <p className="response-error">{error}</p>}
+
+          {!busy && answer && (
+            <>
+              <div className="response-text">{answer.text}</div>
+              <footer>
+                <span>{answer.context.items.length} recalled memories</span>
+                <span>output persisted to cognition</span>
+              </footer>
+            </>
+          )}
+        </section>
+      )}
 
       <form className="command glass" onSubmit={submit}>
         <span className="prompt">›</span>
@@ -76,8 +129,11 @@ export default function App() {
           onChange={(event) => setInput(event.target.value)}
           placeholder="Ask, command, search, create…"
           aria-label="OS command input"
+          disabled={busy}
         />
-        <button type="submit">ENTER</button>
+        <button type="submit" disabled={busy}>
+          {busy ? "THINKING" : "ENTER"}
+        </button>
       </form>
     </main>
   );
