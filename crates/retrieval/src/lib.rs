@@ -133,7 +133,7 @@ mod tests {
     use os_contracts::{MemoryKind, MemoryRecord};
     use os_storage::Storage;
 
-    use super::{safe_fts_query, FusionWeights, RetrievalEngine, RetrievalSignal};
+    use super::{FusionWeights, RetrievalEngine, RetrievalSignal, safe_fts_query};
 
     #[test]
     fn fusion_prefers_stronger_combined_evidence() {
