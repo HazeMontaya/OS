@@ -47,6 +47,21 @@ The detailed implementation contract is maintained in:
 
 Core rules: the kernel must remain headless-capable; the renderer must not own canonical state; visual activity must correspond to real events; models and tools remain replaceable; capability boundaries cannot be bypassed by agents or UI code.
 
+## Windows Git synchronization
+
+The canonical local working directory is `S:\OS` and the canonical remote is `https://github.com/HazeMontaya/OS.git` on branch `main`.
+
+The two root-level command files use **source-wins mirror semantics**. The selected source always replaces and cleans the destination repository state.
+
+- `GIT-DOWNLOAD-ONLINE-NACH-S-OS.cmd` — GitHub `origin/main` is authoritative. The command fetches the current online branch, resets local `S:\OS` hard to that commit and runs `git clean -ffdx`, removing local tracked changes, untracked files and ignored build/output files that are not part of the online repository. Submodules are also reset and cleaned.
+- `GIT-UPLOAD-S-OS-NACH-ONLINE.cmd` — local `S:\OS` is authoritative. The command stages all tracked changes and deletions, creates a sync commit when required, fetches the current remote SHA and replaces `origin/main` with the local Git state using `--force-with-lease`. There is no rebase or merge with the old online content.
+
+**Important:** these are intentionally destructive mirror operations. Download discards local repository differences. Upload replaces the remote `main` history/content with the local `main` state. `--force-with-lease` is used instead of blind `--force` so a remote change made after the script's fetch is not silently overwritten.
+
+Files excluded by `.gitignore` are not uploaded because Git does not track them.
+
+Both commands require Git for Windows and valid GitHub credentials for this private repository.
+
 ## Start
 
 Prerequisites: current stable Rust, Node.js, pnpm, Tauri platform prerequisites.
@@ -67,6 +82,15 @@ Full repository validation:
 ```bash
 pnpm check
 ```
+
+## CI validation
+
+GitHub Actions validates:
+
+- Rust formatting, core tests and Clippy on Ubuntu
+- TypeScript type checking and the production frontend build
+- Windows desktop compilation for the real Tauri application
+- Protocol Buffers compiler availability for Lance/DataFusion dependencies
 
 ## Status
 
