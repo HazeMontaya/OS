@@ -1,0 +1,41 @@
+/* OS Black Gold product-level invariants. Imported last. */
+
+[data-theme="IMPERIAL_BLACK"] .shell-grid { opacity: 0.22; }
+[data-theme="CARBON_BRASS"] .shell-grid { opacity: 0.11; }
+[data-theme="NOIR_CHAMPAGNE"] .shell-grid { opacity: 0.13; }
+
+button:focus-visible,
+input:focus-visible,
+select:focus-visible {
+  outline: 1px solid var(--os-gold-bright);
+  outline-offset: 2px;
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--os-gold) 10%, transparent);
+}
+
+::selection {
+  color: var(--os-canvas);
+  background: var(--os-gold-bright);
+}
+
+@media (prefers-contrast: more) {
+  .glass,
+  .settings-panel,
+  .analytics-panel,
+  .node-inspector {
+    border-color: var(--os-gold) !important;
+  }
+
+  .muted,
+  .response-meta,
+  .telemetry,
+  .settings-section-title small {
+    color: var(--os-text-muted) !important;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .thinking-orbit {
+    animation-duration: 0.001ms;
+    animation-iteration-count: 1;
+  }
+}

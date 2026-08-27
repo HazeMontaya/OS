@@ -34,7 +34,7 @@ pub struct CapabilityProfile {
 
 impl CapabilityProfile {
     pub fn safe_default() -> Self {
-        use CapabilityMode::{Allow, Ask, Deny, Sandbox};
+        use CapabilityMode::{Allow, Ask, Sandbox};
         use SystemCapability::*;
         Self {
             name: "safe-default".into(),

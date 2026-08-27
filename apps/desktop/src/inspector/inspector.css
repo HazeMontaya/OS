@@ -1,15 +1,15 @@
 .node-inspector {
   position: absolute;
-  z-index: 4;
+  z-index: 12;
   left: 28px;
   top: 92px;
-  width: min(340px, calc(100vw - 56px));
+  width: min(350px, calc(100vw - 56px));
   max-height: calc(100vh - 204px);
-  border-radius: 22px;
-  padding: 17px;
+  border-radius: 12px;
+  padding: 18px;
   overflow: auto;
   scrollbar-width: thin;
-  scrollbar-color: rgba(105, 186, 255, 0.2) transparent;
+  scrollbar-color: color-mix(in srgb, var(--os-gold) 22%, transparent) transparent;
 }
 
 .node-inspector::before {
@@ -19,13 +19,23 @@
   pointer-events: none;
   border-radius: inherit;
   background:
-    radial-gradient(circle at 0% 0%, rgba(105, 196, 255, 0.11), transparent 36%),
-    linear-gradient(180deg, rgba(92, 159, 224, 0.035), transparent 28%);
+    radial-gradient(circle at 0 0, color-mix(in srgb, var(--os-gold) 8%, transparent), transparent 34%),
+    linear-gradient(180deg, color-mix(in srgb, var(--os-gold) 2.8%, transparent), transparent 32%);
 }
 
-.node-inspector > * {
-  position: relative;
+.node-inspector::after {
+  content: "";
+  position: absolute;
+  left: -1px;
+  top: 17px;
+  bottom: 17px;
+  width: 1px;
+  background: linear-gradient(180deg, transparent, var(--os-gold-bright), transparent);
+  box-shadow: 0 0 18px color-mix(in srgb, var(--os-gold) 24%, transparent);
+  pointer-events: none;
 }
+
+.node-inspector > * { position: relative; }
 
 .node-inspector-header {
   display: flex;
@@ -33,28 +43,22 @@
   justify-content: space-between;
   gap: 14px;
   padding-bottom: 14px;
-  border-bottom: 1px solid rgba(150, 204, 255, 0.08);
+  border-bottom: 1px solid var(--os-border);
 }
 
-.node-inspector-header > div {
-  min-width: 0;
-  display: grid;
-  gap: 5px;
-}
-
+.node-inspector-header > div { min-width: 0; display: grid; gap: 5px; }
 .node-inspector-header strong {
   overflow: hidden;
-  color: rgba(239, 248, 255, 0.92);
+  color: var(--os-text);
   font-size: 17px;
-  font-weight: 580;
+  font-weight: 560;
   letter-spacing: -0.025em;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
-
 .node-inspector-header small {
-  color: rgba(202, 227, 250, 0.36);
-  font-size: 8px;
+  color: var(--os-text-faint);
+  font: 550 8px/1.2 "Cascadia Code", monospace;
   letter-spacing: 0.12em;
   text-transform: uppercase;
 }
@@ -65,40 +69,34 @@
   gap: 7px;
   margin: 13px 0;
 }
-
 .node-score-grid > div {
-  padding: 10px;
-  border: 1px solid rgba(144, 203, 255, 0.08);
-  border-radius: 12px;
-  background: rgba(95, 163, 224, 0.035);
+  padding: 11px 10px 10px;
+  border: 1px solid var(--os-border);
+  border-radius: 8px;
+  background: color-mix(in srgb, var(--os-gold) 2.6%, transparent);
+  box-shadow: inset 0 0 22px color-mix(in srgb, var(--os-gold) 1.5%, transparent);
 }
-
 .node-score-grid span,
-.node-score-grid strong {
-  display: block;
-}
-
+.node-score-grid strong { display: block; }
 .node-score-grid span {
-  color: rgba(207, 229, 250, 0.34);
-  font-size: 8px;
-  letter-spacing: 0.09em;
+  color: var(--os-text-faint);
+  font: 550 7px/1.1 "Cascadia Code", monospace;
+  letter-spacing: 0.11em;
   text-transform: uppercase;
 }
-
 .node-score-grid strong {
-  margin-top: 5px;
-  color: rgba(237, 248, 255, 0.84);
-  font-size: 17px;
-  font-weight: 540;
+  margin-top: 6px;
+  color: var(--os-gold-soft);
+  font-size: 18px;
+  font-weight: 480;
 }
 
 .node-relations {
-  padding: 11px 10px 9px;
-  border: 1px solid rgba(143, 202, 255, 0.08);
-  border-radius: 15px;
-  background: rgba(3, 10, 18, 0.32);
+  padding: 12px 10px 9px;
+  border: 1px solid var(--os-border);
+  border-radius: 9px;
+  background: color-mix(in srgb, var(--os-canvas) 84%, transparent);
 }
-
 .node-section-title {
   display: flex;
   align-items: baseline;
@@ -106,113 +104,66 @@
   gap: 10px;
   padding: 0 3px 8px;
 }
-
 .node-section-title span {
-  color: rgba(232, 244, 255, 0.66);
-  font-size: 10px;
-  letter-spacing: 0.09em;
+  color: var(--os-text-muted);
+  font-size: 9px;
+  font-weight: 620;
+  letter-spacing: 0.11em;
   text-transform: uppercase;
 }
+.node-section-title small { color: var(--os-text-faint); font: 500 7px/1 "Cascadia Code", monospace; }
 
-.node-section-title small {
-  color: rgba(206, 228, 250, 0.29);
-  font-size: 8px;
-}
-
-.relation-list {
-  display: grid;
-  gap: 3px;
-}
-
+.relation-list { display: grid; gap: 3px; }
 .relation-row {
   display: grid;
   grid-template-columns: 18px minmax(0, 1fr) auto auto;
   align-items: center;
   gap: 7px;
-  min-height: 36px;
-  padding: 5px 6px;
-  border-radius: 9px;
-  background: rgba(86, 154, 215, 0.025);
+  min-height: 37px;
+  padding: 5px 7px;
+  border: 1px solid transparent;
+  border-radius: 7px;
+  background: color-mix(in srgb, var(--os-gold) 1.7%, transparent);
 }
-
-.relation-row > div {
-  min-width: 0;
-  display: grid;
-  gap: 2px;
+.relation-row:hover {
+  border-color: var(--os-border);
+  background: color-mix(in srgb, var(--os-gold) 4.2%, transparent);
 }
-
+.relation-row > div { min-width: 0; display: grid; gap: 2px; }
 .relation-row strong,
-.relation-row small {
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
+.relation-row small { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .relation-row strong {
-  color: rgba(224, 240, 255, 0.62);
-  font-size: 8px;
-  font-weight: 580;
+  color: var(--os-text-muted);
+  font: 600 8px/1.1 "Cascadia Code", monospace;
   letter-spacing: 0.06em;
   text-transform: uppercase;
 }
-
-.relation-row small {
-  color: rgba(205, 227, 249, 0.31);
-  font-size: 8px;
-}
-
-.relation-direction {
-  color: rgba(113, 208, 255, 0.72);
-  text-align: center;
-}
-
-.relation-in {
-  color: rgba(125, 244, 215, 0.64);
-}
-
+.relation-row small { color: var(--os-text-faint); font-size: 8px; }
+.relation-direction { color: var(--os-gold-bright); text-align: center; text-shadow: 0 0 10px color-mix(in srgb, var(--os-gold) 18%, transparent); }
+.relation-in { color: var(--os-gold); }
 .relation-weight,
 .relation-history {
-  color: rgba(201, 226, 248, 0.33);
-  font-family: ui-monospace, SFMono-Regular, Consolas, monospace;
-  font-size: 8px;
+  color: var(--os-text-faint);
+  font: 500 8px/1 "Cascadia Code", monospace;
 }
-
 .relation-history {
   padding: 2px 4px;
-  border: 1px solid rgba(169, 184, 211, 0.08);
-  border-radius: 5px;
+  border: 1px solid color-mix(in srgb, var(--os-bronze) 24%, transparent);
+  border-radius: 4px;
+  color: color-mix(in srgb, var(--os-bronze) 82%, var(--os-text-faint));
   text-transform: uppercase;
 }
-
 .node-empty {
   min-height: 74px;
   display: grid;
   place-items: center;
-  color: rgba(211, 231, 251, 0.32);
+  color: var(--os-text-faint);
   font-size: 10px;
   text-align: center;
 }
-
-.node-inspector-footer {
-  display: grid;
-  gap: 4px;
-  margin-top: 12px;
-  padding: 0 3px;
-}
-
-.node-inspector-footer span {
-  color: rgba(208, 229, 249, 0.28);
-  font-size: 7px;
-  letter-spacing: 0.12em;
-}
-
-.node-inspector-footer code {
-  overflow: hidden;
-  color: rgba(202, 226, 248, 0.38);
-  font-size: 8px;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
+.node-inspector-footer { display: grid; gap: 4px; margin-top: 12px; padding: 0 3px; }
+.node-inspector-footer span { color: var(--os-text-faint); font: 600 7px/1 "Cascadia Code", monospace; letter-spacing: 0.12em; }
+.node-inspector-footer code { overflow: hidden; color: var(--os-text-faint); font: 500 8px/1.25 "Cascadia Code", monospace; text-overflow: ellipsis; white-space: nowrap; }
 
 @media (max-width: 960px) {
   .node-inspector {

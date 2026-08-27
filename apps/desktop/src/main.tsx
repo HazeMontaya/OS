@@ -6,6 +6,7 @@ import "./analytics/analytics.css";
 import "./analytics/trace.css";
 import "./inspector/inspector.css";
 import "./spatial/navigation.css";
+import "./theme/black-gold.css";
 
 createRoot(document.getElementById("root")!).render(
   <StrictMode>
