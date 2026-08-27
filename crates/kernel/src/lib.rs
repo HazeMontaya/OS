@@ -1,4 +1,7 @@
-use std::{path::Path, time::{SystemTime, UNIX_EPOCH}};
+use std::{
+    path::Path,
+    time::{SystemTime, UNIX_EPOCH},
+};
 
 use os_contracts::{CognitiveEvent, Sensitivity, SystemSnapshot};
 use os_event_ledger::EventLedger;
@@ -68,9 +71,18 @@ impl Kernel {
         SystemSnapshot {
             kernel_online: true,
             event_count: self.storage.event_count().unwrap_or_else(|_| self.ledger.len()),
-            memory_count: self.memory.len(),
-            node_count: self.graph.node_count(),
-            edge_count: self.graph.edge_count(),
+            memory_count: self
+                .storage
+                .memory_count()
+                .unwrap_or_else(|_| self.memory.len()),
+            node_count: self
+                .storage
+                .entity_count()
+                .unwrap_or_else(|_| self.graph.node_count()),
+            edge_count: self
+                .storage
+                .relationship_count()
+                .unwrap_or_else(|_| self.graph.edge_count()),
         }
     }
 }
