@@ -13,7 +13,8 @@
 
 .spatial-level,
 .spatial-cluster,
-.spatial-navigator button,
+.camera-mode-strip,
+.spatial-navigator > button,
 .spatial-hover-readout {
   border: 1px solid color-mix(in srgb, var(--os-gold) 15%, transparent);
   background:
@@ -27,6 +28,7 @@
 
 .spatial-level,
 .spatial-cluster {
+  position: relative;
   min-height: 47px;
   display: grid;
   align-content: center;
@@ -39,11 +41,14 @@
 .spatial-cluster::before {
   content: "";
   position: absolute;
+  left: 0;
+  top: 50%;
   width: 1px;
   height: 17px;
-  margin-left: -12px;
+  transform: translateY(-50%);
   background: linear-gradient(180deg, transparent, var(--os-gold-bright), transparent);
   opacity: 0.58;
+  box-shadow: 0 0 12px color-mix(in srgb, var(--os-gold) 30%, transparent);
 }
 
 .spatial-level span,
@@ -76,22 +81,111 @@
   letter-spacing: 0.055em;
 }
 
-.spatial-navigator button {
+.camera-mode-strip {
+  position: relative;
+  display: grid;
+  grid-template-columns: repeat(6, minmax(34px, 1fr));
+  align-items: stretch;
+  gap: 2px;
+  min-height: 47px;
+  padding: 4px;
+  border-radius: 10px;
+  overflow: hidden;
+}
+
+.camera-mode-strip::after {
+  content: "CAMERA DIRECTOR";
+  position: absolute;
+  left: 8px;
+  right: 8px;
+  bottom: 2px;
+  color: color-mix(in srgb, var(--os-text-faint) 78%, transparent);
+  font: 600 5px/1 "Cascadia Code", monospace;
+  letter-spacing: 0.2em;
+  text-align: center;
+  pointer-events: none;
+}
+
+.camera-mode-strip button,
+.spatial-navigator > button {
+  color: var(--os-text-muted);
+  cursor: pointer;
+  transition:
+    border-color 160ms ease,
+    color 160ms ease,
+    background 160ms ease,
+    box-shadow 160ms ease,
+    transform 160ms ease;
+}
+
+.camera-mode-strip button {
+  position: relative;
+  min-width: 34px;
+  min-height: 31px;
+  align-self: start;
+  padding: 0 7px 2px;
+  border: 1px solid transparent;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--os-text-faint);
+  font: 650 7px/1 "Cascadia Code", monospace;
+  letter-spacing: 0.1em;
+}
+
+.camera-mode-strip button::before {
+  content: "";
+  position: absolute;
+  left: 50%;
+  bottom: 2px;
+  width: 0;
+  height: 1px;
+  transform: translateX(-50%);
+  background: var(--os-gold-bright);
+  box-shadow: 0 0 8px var(--os-gold);
+  opacity: 0;
+  transition: width 160ms ease, opacity 160ms ease;
+}
+
+.camera-mode-strip button:hover {
+  color: var(--os-gold-soft);
+  border-color: color-mix(in srgb, var(--os-gold) 20%, transparent);
+  background: color-mix(in srgb, var(--os-gold) 5%, transparent);
+}
+
+.camera-mode-strip button.active {
+  color: var(--os-gold-bright);
+  border-color: color-mix(in srgb, var(--os-gold-bright) 28%, transparent);
+  background:
+    linear-gradient(180deg, color-mix(in srgb, var(--os-gold) 11%, transparent), color-mix(in srgb, var(--os-gold) 3%, transparent));
+  box-shadow:
+    inset 0 0 16px color-mix(in srgb, var(--os-gold) 8%, transparent),
+    0 0 18px color-mix(in srgb, var(--os-gold) 6%, transparent);
+  text-shadow: 0 0 10px color-mix(in srgb, var(--os-gold) 32%, transparent);
+}
+
+.camera-mode-strip button.active::before {
+  width: 48%;
+  opacity: 0.86;
+}
+
+.spatial-navigator > button {
   align-self: stretch;
   border-radius: 10px;
   padding: 0 12px;
   color: var(--os-text-muted);
   font: 650 8px/1 "Segoe UI", sans-serif;
   letter-spacing: 0.15em;
-  cursor: pointer;
-  transition: border-color 160ms ease, color 160ms ease, background 160ms ease, box-shadow 160ms ease;
 }
 
-.spatial-navigator button:hover {
+.spatial-navigator > button:hover {
   color: var(--os-gold-soft);
   border-color: color-mix(in srgb, var(--os-gold-bright) 34%, transparent);
   background: color-mix(in srgb, var(--os-gold) 8%, var(--os-canvas));
   box-shadow: 0 0 24px color-mix(in srgb, var(--os-gold) 8%, transparent);
+}
+
+.spatial-overview-button {
+  min-width: 92px;
 }
 
 .spatial-hover-readout {
@@ -125,6 +219,16 @@
 
 .spatial-navigator.node-selected { left: 390px; }
 
+@media (max-width: 1440px) {
+  .camera-mode-strip {
+    grid-template-columns: repeat(6, minmax(31px, 1fr));
+  }
+  .camera-mode-strip button {
+    min-width: 31px;
+    padding-inline: 4px;
+  }
+}
+
 @media (max-width: 1180px) {
   .spatial-navigator.node-selected {
     left: 30px;
@@ -138,17 +242,39 @@
   .spatial-navigator,
   .spatial-navigator.node-selected {
     left: 14px;
+    right: 14px;
     top: 82px;
     bottom: auto;
+    max-width: calc(100vw - 28px);
   }
   .spatial-hover-readout {
     left: 14px;
     bottom: 96px;
   }
+  .camera-mode-strip {
+    overflow-x: auto;
+    grid-template-columns: repeat(6, 34px);
+  }
+}
+
+@media (max-width: 720px) {
+  .spatial-cluster { display: none; }
+  .camera-mode-strip::after { display: none; }
+  .camera-mode-strip { min-height: 39px; }
+  .camera-mode-strip button { min-height: 29px; }
 }
 
 @media (max-width: 620px) {
-  .spatial-cluster { display: none; }
+  .camera-mode-strip {
+    grid-template-columns: repeat(6, 30px);
+    max-width: 204px;
+  }
+  .camera-mode-strip button {
+    min-width: 30px;
+    padding-inline: 2px;
+    font-size: 6px;
+  }
+  .spatial-overview-button { display: none; }
   .spatial-hover-readout {
     right: 14px;
     max-width: none;
