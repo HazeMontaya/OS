@@ -126,7 +126,11 @@ impl Kernel {
         model_id: &str,
     ) -> Result<(), KernelError> {
         let model_id = model_id.trim();
-        let model_label = if model_id.is_empty() { "Local model" } else { model_id };
+        let model_label = if model_id.is_empty() {
+            "Local model"
+        } else {
+            model_id
+        };
         let actor_id = format!("model:{model_label}");
         self.ingest_text(
             content,
@@ -469,7 +473,12 @@ mod tests {
             .expect("ingest output");
         let graph = kernel.graph_snapshot();
         assert!(graph.nodes.iter().any(|node| node.kind == "model"));
-        assert!(graph.nodes.iter().any(|node| node.kind == "episodic_memory"));
+        assert!(
+            graph
+                .nodes
+                .iter()
+                .any(|node| node.kind == "episodic_memory")
+        );
         assert!(!graph.nodes.iter().any(|node| node.kind == "stable_memory"));
     }
 
@@ -479,7 +488,9 @@ mod tests {
         kernel
             .ingest_user_input("OS uses a temporal knowledge graph with provenance".into())
             .expect("ingest context");
-        let pack = kernel.context_pack("temporal provenance", 5).expect("context pack");
+        let pack = kernel
+            .context_pack("temporal provenance", 5)
+            .expect("context pack");
         assert_eq!(pack.items.len(), 1);
         assert!(pack.items[0].text.contains("temporal knowledge graph"));
         assert_eq!(pack.items[0].provenance.len(), 1);
