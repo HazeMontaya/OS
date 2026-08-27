@@ -47,6 +47,17 @@ The detailed implementation contract is maintained in:
 
 Core rules: the kernel must remain headless-capable; the renderer must not own canonical state; visual activity must correspond to real events; models and tools remain replaceable; capability boundaries cannot be bypassed by agents or UI code.
 
+## Windows Git synchronization
+
+The canonical local working directory is `S:\OS` and the canonical remote is `https://github.com/HazeMontaya/OS.git` on branch `main`.
+
+Two root-level Windows command files provide explicit one-direction synchronization:
+
+- `GIT-DOWNLOAD-ONLINE-NACH-S-OS.cmd` — clones the repository when `S:\OS` does not exist; otherwise stashes uncommitted local changes, fetches GitHub and resets local `main` to `origin/main`. Existing local work is protected in a Git stash before the reset.
+- `GIT-UPLOAD-S-OS-NACH-ONLINE.cmd` — stages and commits local changes from `S:\OS`, fetches the current online `main`, rebases without force-pushing, and pushes only when the rebase succeeds without conflicts.
+
+Both commands require Git for Windows and valid GitHub credentials for this private repository. Neither command uses `git push --force`.
+
 ## Start
 
 Prerequisites: current stable Rust, Node.js, pnpm, Tauri platform prerequisites.
@@ -67,6 +78,15 @@ Full repository validation:
 ```bash
 pnpm check
 ```
+
+## CI validation
+
+GitHub Actions validates:
+
+- Rust formatting, core tests and Clippy on Ubuntu
+- TypeScript type checking and the production frontend build
+- Windows desktop compilation for the real Tauri application
+- Protocol Buffers compiler availability for Lance/DataFusion dependencies
 
 ## Status
 
