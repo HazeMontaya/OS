@@ -3,6 +3,7 @@ import { invoke } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
 import AnalyticsPanel from "./analytics/AnalyticsPanel";
 import CognitiveVoid from "./CognitiveVoid";
+import NodeInspector from "./inspector/NodeInspector";
 import {
   AskResult,
   CognitiveActivity,
@@ -25,6 +26,7 @@ export default function App() {
   const [activityComponent, setActivityComponent] = useState<string | null>(null);
   const [activityHistory, setActivityHistory] = useState<CognitiveActivityRecord[]>([]);
   const [analyticsOpen, setAnalyticsOpen] = useState(true);
+  const [selectedNodeId, setSelectedNodeId] = useState<string | null>(null);
 
   const refresh = async () => {
     try {
@@ -95,6 +97,9 @@ export default function App() {
   const livePhaseLabel = activityPhase
     ? activityPhase.replaceAll("_", " ").toUpperCase()
     : null;
+  const selectedNode = selectedNodeId
+    ? graph.nodes.find((node) => node.id === selectedNodeId) ?? null
+    : null;
 
   return (
     <main className={`shell${analyticsOpen ? " analytics-visible" : ""}`}>
@@ -102,6 +107,8 @@ export default function App() {
         graph={graph}
         activity={snapshot.event_count + (busy ? 1 : 0)}
         phase={activityPhase}
+        selectedNodeId={selectedNodeId}
+        onSelectNode={(node) => setSelectedNodeId(node?.id ?? null)}
       />
 
       <header className="topbar glass">
@@ -138,6 +145,14 @@ export default function App() {
           busy={busy}
           activityHistory={activityHistory}
           onClose={() => setAnalyticsOpen(false)}
+        />
+      )}
+
+      {selectedNode && (
+        <NodeInspector
+          node={selectedNode}
+          graph={graph}
+          onClose={() => setSelectedNodeId(null)}
         />
       )}
 
