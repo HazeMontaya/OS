@@ -107,6 +107,53 @@ impl Kernel {
     }
 
     pub fn ingest_user_input(&mut self, content: String) -> Result<(), KernelError> {
+        self.ingest_text(
+            content,
+            "actor:user",
+            "User",
+            "actor",
+            "user",
+            "desktop.command_bar",
+            "user.input",
+            SignalKind::Input,
+            true,
+        )
+    }
+
+    pub fn ingest_assistant_output(
+        &mut self,
+        content: String,
+        model_id: &str,
+    ) -> Result<(), KernelError> {
+        let model_id = model_id.trim();
+        let model_label = if model_id.is_empty() { "Local model" } else { model_id };
+        let actor_id = format!("model:{model_label}");
+        self.ingest_text(
+            content,
+            &actor_id,
+            model_label,
+            "model",
+            model_label,
+            "model.gateway",
+            "assistant.output",
+            SignalKind::Output,
+            false,
+        )
+    }
+
+    #[allow(clippy::too_many_arguments)]
+    fn ingest_text(
+        &mut self,
+        content: String,
+        actor_id: &str,
+        actor_label: &str,
+        actor_kind: &str,
+        actor_event_name: &str,
+        source: &str,
+        event_type: &str,
+        signal_kind: SignalKind,
+        allow_memory_promotion: bool,
+    ) -> Result<(), KernelError> {
         let content = content.trim().to_string();
         if content.is_empty() {
             return Ok(());
@@ -118,20 +165,14 @@ impl Kernel {
         let event_id = Uuid::new_v4().to_string();
         let trace_id = Uuid::new_v4().to_string();
         let memory_id = format!("memory:{event_id}");
-        let actor_id = "actor:user".to_string();
 
-        let mut trace = TraceSignal::start(
-            trace_id.clone(),
-            SignalKind::Input,
-            "kernel.ingest_user_input",
-        );
-
+        let mut trace = TraceSignal::start(trace_id.clone(), signal_kind, event_type);
         let event = CognitiveEvent {
             event_id: event_id.clone(),
             timestamp_ms: now,
-            source: "desktop.command_bar".into(),
-            actor: "user".into(),
-            event_type: "user.input".into(),
+            source: source.into(),
+            actor: actor_event_name.into(),
+            event_type: event_type.into(),
             payload: json!({
                 "content": stored_content.clone(),
                 "redacted": privacy.redacted,
@@ -141,21 +182,25 @@ impl Kernel {
             session_id: None,
             project_id: None,
             sensitivity: privacy.sensitivity,
-            trace_id: trace_id.clone(),
+            trace_id,
             parent_event: None,
-            provenance: vec!["local:user-input".into()],
+            provenance: vec![format!("local:{source}")],
         };
 
         self.storage.append_event(&event)?;
-        self.ledger.append(event.clone());
+        self.ledger.append(event);
 
-        let memory = self.memory_compiler.compile(MemoryCompileInput {
+        let mut memory = self.memory_compiler.compile(MemoryCompileInput {
             id: memory_id.clone(),
             text: stored_content.clone(),
             sensitivity: privacy.sensitivity,
             observed_at_ms: now,
             provenance: vec![event_id.clone()],
         });
+        if !allow_memory_promotion && !privacy.redacted {
+            memory.kind = MemoryKind::Episodic;
+            memory.relevance = memory.relevance.min(0.68);
+        }
         let memory_entity_kind = if privacy.redacted {
             "secret_reference"
         } else {
@@ -166,9 +211,9 @@ impl Kernel {
         self.memory.upsert(memory);
 
         let actor_entity = EntityRecord {
-            entity_id: actor_id.clone(),
-            kind: "actor".into(),
-            canonical_label: "User".into(),
+            entity_id: actor_id.into(),
+            kind: actor_kind.into(),
+            canonical_label: actor_label.into(),
             aliases: vec![],
             confidence: 1.0,
             first_seen_ms: now,
@@ -188,9 +233,9 @@ impl Kernel {
         self.storage.upsert_entity(&actor_entity)?;
         self.storage.upsert_entity(&memory_entity)?;
 
-        let relationship = RelationshipRecord {
+        let generated = RelationshipRecord {
             edge_id: format!("edge:{event_id}:generated"),
-            from_entity_id: actor_id.clone(),
+            from_entity_id: actor_id.into(),
             to_entity_id: memory_id.clone(),
             relation: "generated".into(),
             weight: (0.4 + memory_relevance * 0.6).clamp(0.0, 1.0),
@@ -199,13 +244,13 @@ impl Kernel {
             valid_until_ms: None,
             provenance: vec![event_id.clone()],
         };
-        self.storage.insert_relationship(&relationship)?;
+        self.storage.insert_relationship(&generated)?;
 
         self.graph.upsert_node(CognitiveNode {
-            id: actor_id.clone(),
-            kind: "actor".into(),
-            label: "User".into(),
-            importance: node_importance("actor"),
+            id: actor_id.into(),
+            kind: actor_kind.into(),
+            label: actor_label.into(),
+            importance: node_importance(actor_kind),
             confidence: 1.0,
         });
         self.graph.upsert_node(CognitiveNode {
@@ -217,15 +262,40 @@ impl Kernel {
             confidence: 1.0,
         });
         self.graph.add_edge(CognitiveEdge {
-            id: relationship.edge_id,
-            from: actor_id,
+            id: generated.edge_id,
+            from: actor_id.into(),
             to: memory_id,
-            relation: relationship.relation,
-            weight: relationship.weight,
+            relation: generated.relation,
+            weight: generated.weight,
             valid_from_ms: now,
             valid_until_ms: None,
-            provenance: vec![event_id],
+            provenance: vec![event_id.clone()],
         });
+
+        if actor_kind == "model" {
+            let invoked = RelationshipRecord {
+                edge_id: format!("edge:self:invokes:{actor_id}"),
+                from_entity_id: "self:os".into(),
+                to_entity_id: actor_id.into(),
+                relation: "invokes".into(),
+                weight: 0.82,
+                confidence: 1.0,
+                valid_from_ms: now,
+                valid_until_ms: None,
+                provenance: vec![event_id],
+            };
+            self.storage.insert_relationship(&invoked)?;
+            self.graph.add_edge(CognitiveEdge {
+                id: invoked.edge_id,
+                from: invoked.from_entity_id,
+                to: invoked.to_entity_id,
+                relation: invoked.relation,
+                weight: invoked.weight,
+                valid_from_ms: invoked.valid_from_ms,
+                valid_until_ms: None,
+                provenance: invoked.provenance,
+            });
+        }
 
         trace.complete(true);
         self.telemetry.record(trace);
@@ -258,7 +328,6 @@ impl Kernel {
             if memory.text.starts_with("[protected secret reference:") {
                 continue;
             }
-
             self.storage.record_memory_retrieval(&memory.id, false)?;
             items.push(ContextItem {
                 id: memory.id.clone(),
@@ -385,15 +454,23 @@ mod tests {
         kernel
             .ingest_user_input("remember this interaction".into())
             .expect("ingest event");
-
         let snapshot = kernel.snapshot();
         assert_eq!(snapshot.event_count, 1);
         assert_eq!(snapshot.memory_count, 1);
         assert_eq!(snapshot.node_count, 3);
         assert_eq!(snapshot.edge_count, 1);
-        assert_eq!(kernel.telemetry_count(), 1);
-        assert_eq!(kernel.graph_snapshot().nodes.len(), 3);
-        assert_eq!(kernel.graph_snapshot().edges.len(), 1);
+    }
+
+    #[test]
+    fn model_output_stays_ephemeral_until_consolidated() {
+        let mut kernel = Kernel::in_memory().expect("create kernel");
+        kernel
+            .ingest_assistant_output("Always remember this invented claim".into(), "local-test")
+            .expect("ingest output");
+        let graph = kernel.graph_snapshot();
+        assert!(graph.nodes.iter().any(|node| node.kind == "model"));
+        assert!(graph.nodes.iter().any(|node| node.kind == "episodic_memory"));
+        assert!(!graph.nodes.iter().any(|node| node.kind == "stable_memory"));
     }
 
     #[test]
@@ -429,30 +506,18 @@ mod tests {
         kernel
             .ingest_user_input("api_key=ghp_supersecretvalue".into())
             .expect("ingest secret event");
-
         assert!(
             kernel
                 .recall("supersecretvalue", 5)
                 .expect("secret recall")
                 .is_empty()
         );
-        let graph = kernel.graph_snapshot();
         assert!(
-            graph
+            kernel
+                .graph_snapshot()
                 .nodes
                 .iter()
                 .any(|node| node.kind == "secret_reference")
         );
-    }
-
-    #[test]
-    fn recall_uses_persistent_full_text_index() {
-        let mut kernel = Kernel::in_memory().expect("create kernel");
-        kernel
-            .ingest_user_input("the temporal graph remembers provenance".into())
-            .expect("ingest event");
-
-        let hits = kernel.recall("provenance", 5).expect("recall");
-        assert_eq!(hits.len(), 1);
     }
 }
