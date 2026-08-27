@@ -1,17 +1,18 @@
 use std::{
+    collections::HashMap,
     path::Path,
     time::{SystemTime, UNIX_EPOCH},
 };
 
 use os_contracts::{
     CognitiveEdge, CognitiveEvent, CognitiveNode, ContextItem, ContextPack, EntityRecord,
-    GraphSnapshot, MemoryKind, RelationshipRecord, SystemSnapshot,
+    GraphSnapshot, MemoryKind, MemoryRecord, RelationshipRecord, SystemSnapshot,
 };
 use os_event_ledger::EventLedger;
 use os_knowledge_graph::KnowledgeGraph;
 use os_memory::{MemoryCompileInput, MemoryCompiler, MemoryStore};
 use os_privacy::PrivacyFilter;
-use os_retrieval::{RecallHit, RetrievalEngine};
+use os_retrieval::{RecallHit, RetrievalEngine, RetrievalSignal};
 use os_storage::{Storage, StorageError};
 use os_telemetry::{SignalKind, TelemetryBuffer, TraceSignal};
 use serde_json::json;
@@ -22,6 +23,14 @@ use uuid::Uuid;
 pub enum KernelError {
     #[error("storage error: {0}")]
     Storage(#[from] StorageError),
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct SemanticMemoryProjection {
+    pub memory_id: String,
+    pub kind: String,
+    pub text: String,
+    pub updated_at_ms: i64,
 }
 
 pub struct Kernel {
@@ -106,7 +115,10 @@ impl Kernel {
         })
     }
 
-    pub fn ingest_user_input(&mut self, content: String) -> Result<(), KernelError> {
+    pub fn ingest_user_input(
+        &mut self,
+        content: String,
+    ) -> Result<Option<SemanticMemoryProjection>, KernelError> {
         self.ingest_text(
             content,
             "actor:user",
@@ -124,7 +136,7 @@ impl Kernel {
         &mut self,
         content: String,
         model_id: &str,
-    ) -> Result<(), KernelError> {
+    ) -> Result<Option<SemanticMemoryProjection>, KernelError> {
         let model_id = model_id.trim();
         let model_label = if model_id.is_empty() {
             "Local model"
@@ -157,10 +169,10 @@ impl Kernel {
         event_type: &str,
         signal_kind: SignalKind,
         allow_memory_promotion: bool,
-    ) -> Result<(), KernelError> {
+    ) -> Result<Option<SemanticMemoryProjection>, KernelError> {
         let content = content.trim().to_string();
         if content.is_empty() {
-            return Ok(());
+            return Ok(None);
         }
 
         let privacy = self.privacy.assess(&content);
@@ -205,6 +217,7 @@ impl Kernel {
             memory.kind = MemoryKind::Episodic;
             memory.relevance = memory.relevance.min(0.68);
         }
+        let semantic_projection = (!privacy.redacted).then(|| semantic_projection(&memory));
         let memory_entity_kind = if privacy.redacted {
             "secret_reference"
         } else {
@@ -303,10 +316,30 @@ impl Kernel {
 
         trace.complete(true);
         self.telemetry.record(trace);
-        Ok(())
+        Ok(semantic_projection)
     }
 
-    pub fn context_pack(&mut self, query: &str, limit: usize) -> Result<ContextPack, KernelError> {
+    pub fn lexical_memory_hits(
+        &self,
+        query: &str,
+        limit: usize,
+    ) -> Result<Vec<RecallHit>, KernelError> {
+        let query = query.trim();
+        if query.is_empty() || limit == 0 {
+            return Ok(Vec::new());
+        }
+        Ok(self
+            .retrieval
+            .lexical_memory_recall(&self.storage, query, limit)?)
+    }
+
+    pub fn hybrid_context_pack(
+        &mut self,
+        query: &str,
+        lexical_hits: &[RecallHit],
+        semantic_scores: &[(String, f32)],
+        limit: usize,
+    ) -> Result<ContextPack, KernelError> {
         let query = query.trim();
         if query.is_empty() || limit == 0 {
             return Ok(ContextPack {
@@ -318,18 +351,51 @@ impl Kernel {
         let mut trace = TraceSignal::start(
             Uuid::new_v4().to_string(),
             SignalKind::MemoryRecall,
-            "kernel.context_pack",
+            "kernel.hybrid_context_pack",
         );
-        let hits = self
-            .retrieval
-            .lexical_memory_recall(&self.storage, query, limit)?;
-        let mut items = Vec::with_capacity(hits.len());
+        let mut signals = HashMap::<String, RetrievalSignal>::new();
 
-        for hit in hits {
+        for hit in lexical_hits {
+            let signal = signals
+                .entry(hit.id.clone())
+                .or_insert_with(|| empty_retrieval_signal(hit.id.clone()));
+            signal.lexical = signal.lexical.max(hit.score.clamp(0.0, 1.0));
+        }
+        for (memory_id, score) in semantic_scores {
+            let signal = signals
+                .entry(memory_id.clone())
+                .or_insert_with(|| empty_retrieval_signal(memory_id.clone()));
+            signal.semantic = signal.semantic.max(score.clamp(0.0, 1.0));
+        }
+
+        let now = now_ms();
+        for signal in signals.values_mut() {
+            let Some(memory) = self
+                .memory
+                .all()
+                .iter()
+                .find(|memory| memory.id == signal.id)
+            else {
+                continue;
+            };
+            if is_protected_memory(memory) {
+                continue;
+            }
+            signal.temporal = temporal_score(now, memory.last_confirmed_ms);
+            signal.procedural = if matches!(memory.kind, MemoryKind::Procedural) {
+                1.0
+            } else {
+                0.0
+            };
+        }
+
+        let ranked = self.retrieval.rank(signals.into_values().collect());
+        let mut items = Vec::with_capacity(limit.min(ranked.len()));
+        for hit in ranked.iter().take(limit) {
             let Some(memory) = self.memory.all().iter().find(|memory| memory.id == hit.id) else {
                 continue;
             };
-            if memory.text.starts_with("[protected secret reference:") {
+            if is_protected_memory(memory) {
                 continue;
             }
             self.storage.record_memory_retrieval(&memory.id, false)?;
@@ -349,6 +415,20 @@ impl Kernel {
             query: query.to_string(),
             items,
         })
+    }
+
+    pub fn context_pack(&mut self, query: &str, limit: usize) -> Result<ContextPack, KernelError> {
+        let lexical = self.lexical_memory_hits(query, limit.saturating_mul(3).max(limit))?;
+        self.hybrid_context_pack(query, &lexical, &[], limit)
+    }
+
+    pub fn semantic_memory_projections(&self) -> Vec<SemanticMemoryProjection> {
+        self.memory
+            .all()
+            .iter()
+            .filter(|memory| !is_protected_memory(memory))
+            .map(semantic_projection)
+            .collect()
     }
 
     pub fn recall(&mut self, query: &str, limit: usize) -> Result<Vec<RecallHit>, KernelError> {
@@ -394,6 +474,36 @@ impl Kernel {
     pub fn telemetry_count(&self) -> usize {
         self.telemetry.len()
     }
+}
+
+fn empty_retrieval_signal(id: String) -> RetrievalSignal {
+    RetrievalSignal {
+        id,
+        lexical: 0.0,
+        semantic: 0.0,
+        graph: 0.0,
+        temporal: 0.0,
+        procedural: 0.0,
+    }
+}
+
+fn semantic_projection(memory: &MemoryRecord) -> SemanticMemoryProjection {
+    SemanticMemoryProjection {
+        memory_id: memory.id.clone(),
+        kind: memory_node_kind(&memory.kind).into(),
+        text: memory.text.clone(),
+        updated_at_ms: memory.last_confirmed_ms,
+    }
+}
+
+fn is_protected_memory(memory: &MemoryRecord) -> bool {
+    memory.text.starts_with("[protected secret reference:")
+}
+
+fn temporal_score(now_ms: i64, last_confirmed_ms: i64) -> f32 {
+    let age_ms = now_ms.saturating_sub(last_confirmed_ms).max(0) as f32;
+    let age_days = age_ms / 86_400_000.0;
+    (1.0 / (1.0 + age_days / 30.0)).clamp(0.0, 1.0)
 }
 
 fn memory_node_kind(kind: &MemoryKind) -> &'static str {
@@ -497,6 +607,25 @@ mod tests {
     }
 
     #[test]
+    fn semantic_signal_can_recall_memory_without_lexical_overlap() {
+        let mut kernel = Kernel::in_memory().expect("create kernel");
+        let projection = kernel
+            .ingest_user_input("The nebula renderer uses hierarchical spatial clustering".into())
+            .expect("ingest context")
+            .expect("semantic projection");
+        let pack = kernel
+            .hybrid_context_pack(
+                "unrelated literal terms",
+                &[],
+                &[(projection.memory_id, 0.94)],
+                5,
+            )
+            .expect("hybrid context pack");
+        assert_eq!(pack.items.len(), 1);
+        assert!(pack.items[0].text.contains("hierarchical spatial clustering"));
+    }
+
+    #[test]
     fn explicit_rules_are_compiled_as_stable_memory() {
         let mut kernel = Kernel::in_memory().expect("create kernel");
         kernel
@@ -512,11 +641,12 @@ mod tests {
     }
 
     #[test]
-    fn secrets_are_redacted_before_persistence_and_recall() {
+    fn secrets_are_redacted_before_persistence_recall_and_embedding() {
         let mut kernel = Kernel::in_memory().expect("create kernel");
-        kernel
+        let projection = kernel
             .ingest_user_input("api_key=ghp_supersecretvalue".into())
             .expect("ingest secret event");
+        assert!(projection.is_none());
         assert!(
             kernel
                 .recall("supersecretvalue", 5)
