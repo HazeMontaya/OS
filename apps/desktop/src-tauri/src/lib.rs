@@ -10,7 +10,11 @@ struct AppState {
 
 #[tauri::command]
 fn system_snapshot(state: tauri::State<'_, AppState>) -> SystemSnapshot {
-    state.kernel.lock().expect("kernel lock poisoned").snapshot()
+    state
+        .kernel
+        .lock()
+        .expect("kernel lock poisoned")
+        .snapshot()
 }
 
 #[tauri::command]
