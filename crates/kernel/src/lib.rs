@@ -5,11 +5,12 @@ use std::{
 
 use os_contracts::{
     CognitiveEdge, CognitiveEvent, CognitiveNode, EntityRecord, GraphSnapshot, MemoryKind,
-    MemoryRecord, RelationshipRecord, Sensitivity, SystemSnapshot,
+    MemoryRecord, RelationshipRecord, SystemSnapshot,
 };
 use os_event_ledger::EventLedger;
 use os_knowledge_graph::KnowledgeGraph;
 use os_memory::MemoryStore;
+use os_privacy::PrivacyFilter;
 use os_retrieval::{RecallHit, RetrievalEngine};
 use os_storage::{Storage, StorageError};
 use os_telemetry::{SignalKind, TelemetryBuffer, TraceSignal};
@@ -29,6 +30,7 @@ pub struct Kernel {
     memory: MemoryStore,
     graph: KnowledgeGraph,
     retrieval: RetrievalEngine,
+    privacy: PrivacyFilter,
     telemetry: TelemetryBuffer,
 }
 
@@ -97,6 +99,7 @@ impl Kernel {
             memory,
             graph,
             retrieval: RetrievalEngine::default(),
+            privacy: PrivacyFilter,
             telemetry: TelemetryBuffer::default(),
         })
     }
@@ -106,6 +109,14 @@ impl Kernel {
         if content.is_empty() {
             return Ok(());
         }
+
+        let privacy = self.privacy.assess(&content);
+        let stored_content = privacy.stored_text.clone();
+        let memory_entity_kind = if privacy.redacted {
+            "secret_reference"
+        } else {
+            "episodic_memory"
+        };
 
         let now = now_ms();
         let event_id = Uuid::new_v4().to_string();
@@ -125,11 +136,15 @@ impl Kernel {
             source: "desktop.command_bar".into(),
             actor: "user".into(),
             event_type: "user.input".into(),
-            payload: json!({ "content": content.clone() }),
+            payload: json!({
+                "content": stored_content.clone(),
+                "redacted": privacy.redacted,
+                "secret_categories": privacy.secret_categories,
+            }),
             context_id: None,
             session_id: None,
             project_id: None,
-            sensitivity: Sensitivity::Normal,
+            sensitivity: privacy.sensitivity,
             trace_id: trace_id.clone(),
             parent_event: None,
             provenance: vec!["local:user-input".into()],
@@ -141,8 +156,8 @@ impl Kernel {
         let memory = MemoryRecord {
             id: memory_id.clone(),
             kind: MemoryKind::Episodic,
-            text: content.clone(),
-            relevance: 0.75,
+            text: stored_content.clone(),
+            relevance: if privacy.redacted { 0.4 } else { 0.75 },
             confidence: 1.0,
             first_seen_ms: now,
             last_confirmed_ms: now,
@@ -163,8 +178,8 @@ impl Kernel {
         };
         let memory_entity = EntityRecord {
             entity_id: memory_id.clone(),
-            kind: "episodic_memory".into(),
-            canonical_label: compact_label(&content),
+            kind: memory_entity_kind.into(),
+            canonical_label: compact_label(&stored_content),
             aliases: vec![],
             confidence: 1.0,
             first_seen_ms: now,
@@ -179,7 +194,7 @@ impl Kernel {
             from_entity_id: actor_id.clone(),
             to_entity_id: memory_id.clone(),
             relation: "generated".into(),
-            weight: 1.0,
+            weight: if privacy.redacted { 0.55 } else { 1.0 },
             confidence: 1.0,
             valid_from_ms: now,
             valid_until_ms: None,
@@ -196,9 +211,9 @@ impl Kernel {
         });
         self.graph.upsert_node(CognitiveNode {
             id: memory_id.clone(),
-            kind: "episodic_memory".into(),
-            label: compact_label(&content),
-            importance: node_importance("episodic_memory"),
+            kind: memory_entity_kind.into(),
+            label: compact_label(&stored_content),
+            importance: node_importance(memory_entity_kind),
             confidence: 1.0,
         });
         self.graph.add_edge(CognitiveEdge {
@@ -268,6 +283,7 @@ fn node_importance(kind: &str) -> f32 {
         "actor" => 0.95,
         "semantic_memory" | "stable_memory" => 0.85,
         "episodic_memory" => 0.70,
+        "secret_reference" => 0.35,
         "project" | "goal" => 0.82,
         "agent" | "model" | "tool" => 0.78,
         _ => 0.55,
@@ -317,6 +333,18 @@ mod tests {
         assert_eq!(kernel.telemetry_count(), 1);
         assert_eq!(kernel.graph_snapshot().nodes.len(), 3);
         assert_eq!(kernel.graph_snapshot().edges.len(), 1);
+    }
+
+    #[test]
+    fn secrets_are_redacted_before_persistence_and_recall() {
+        let mut kernel = Kernel::in_memory().expect("create kernel");
+        kernel
+            .ingest_user_input("api_key=ghp_supersecretvalue".into())
+            .expect("ingest secret event");
+
+        assert!(kernel.recall("supersecretvalue", 5).expect("secret recall").is_empty());
+        let graph = kernel.graph_snapshot();
+        assert!(graph.nodes.iter().any(|node| node.kind == "secret_reference"));
     }
 
     #[test]
