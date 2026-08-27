@@ -1,0 +1,16 @@
+[package]
+name = "os-semantic-index"
+version.workspace = true
+edition.workspace = true
+publish = false
+
+[dependencies]
+arrow-array = "58.0.0"
+arrow-schema = "58.0.0"
+futures = "0.3"
+lancedb = { version = "0.37.1", default-features = false }
+thiserror.workspace = true
+
+[dev-dependencies]
+tempfile = "3"
+tokio = { version = "1", features = ["macros", "rt-multi-thread"] }
