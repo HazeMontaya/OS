@@ -39,3 +39,6 @@ Node.js v24.18.1
 [2026-08-26T23:58:58.537Z] Error: OS Runtime did not become ready
     at waitForRuntime (S:\OS\resources\app\main.cjs:37:9)
     at async S:\OS\resources\app\main.cjs:59:27
+[2026-08-27T00:38:50.838Z] runtime: OS runtime 0.9.0 running at http://127.0.0.1:43110
+[2026-08-27T00:38:59.877Z] runtime: OS runtime 0.9.0 running at http://127.0.0.1:43110
+[2026-08-27T00:47:22.782Z] runtime: OS runtime 0.9.0 running at http://127.0.0.1:43110
