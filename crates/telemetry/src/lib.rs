@@ -66,6 +66,10 @@ impl TelemetryBuffer {
     pub fn len(&self) -> usize {
         self.signals.len()
     }
+
+    pub fn is_empty(&self) -> bool {
+        self.signals.is_empty()
+    }
 }
 
 fn now_ms() -> i64 {
