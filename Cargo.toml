@@ -8,6 +8,7 @@ members = [
   "crates/knowledge-graph",
   "crates/storage",
   "crates/retrieval",
+  "crates/privacy",
   "crates/policy",
   "crates/model-gateway",
   "crates/telemetry",
