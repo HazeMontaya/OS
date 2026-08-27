@@ -101,8 +101,22 @@ mod tests {
     fn fusion_prefers_stronger_combined_evidence() {
         let engine = RetrievalEngine::new(FusionWeights::default());
         let ranked = engine.rank(vec![
-            RetrievalSignal { id: "weak".into(), lexical: 0.2, semantic: 0.2, graph: 0.2, temporal: 0.2, procedural: 0.0 },
-            RetrievalSignal { id: "strong".into(), lexical: 0.9, semantic: 0.8, graph: 0.7, temporal: 0.8, procedural: 0.2 },
+            RetrievalSignal {
+                id: "weak".into(),
+                lexical: 0.2,
+                semantic: 0.2,
+                graph: 0.2,
+                temporal: 0.2,
+                procedural: 0.0,
+            },
+            RetrievalSignal {
+                id: "strong".into(),
+                lexical: 0.9,
+                semantic: 0.8,
+                graph: 0.7,
+                temporal: 0.8,
+                procedural: 0.2,
+            },
         ]);
         assert_eq!(ranked[0].id, "strong");
     }
