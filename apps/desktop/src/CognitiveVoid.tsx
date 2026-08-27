@@ -3,6 +3,7 @@ import { ArcRotateCamera } from "@babylonjs/core/Cameras/arcRotateCamera";
 import type { AbstractEngine } from "@babylonjs/core/Engines/abstractEngine";
 import { Engine } from "@babylonjs/core/Engines/engine";
 import { WebGPUEngine } from "@babylonjs/core/Engines/webgpuEngine";
+import { PointerEventTypes } from "@babylonjs/core/Events/pointerEvents";
 import { GlowLayer } from "@babylonjs/core/Layers/glowLayer";
 import { HemisphericLight } from "@babylonjs/core/Lights/hemisphericLight";
 import { StandardMaterial } from "@babylonjs/core/Materials/standardMaterial";
@@ -21,6 +22,8 @@ type CognitiveVoidProps = {
   graph: GraphSnapshot;
   activity: number;
   phase: CognitiveActivityPhase | null;
+  selectedNodeId: string | null;
+  onSelectNode: (node: CognitiveNode | null) => void;
 };
 
 const GOLDEN_ANGLE = Math.PI * (3 - Math.sqrt(5));
@@ -249,12 +252,21 @@ function renderGraph(scene: Scene, graph: GraphSnapshot) {
   });
 }
 
-export default function CognitiveVoid({ graph, activity, phase }: CognitiveVoidProps) {
+export default function CognitiveVoid({
+  graph,
+  activity,
+  phase,
+  selectedNodeId,
+  onSelectNode,
+}: CognitiveVoidProps) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const sceneRef = useRef<Scene | null>(null);
   const activityRef = useRef(activity);
   const phaseRef = useRef<CognitiveActivityPhase | null>(phase);
   const graphRef = useRef(graph);
+  const selectedNodeIdRef = useRef<string | null>(selectedNodeId);
+  const onSelectNodeRef = useRef(onSelectNode);
+  const focusTargetRef = useRef(Vector3.Zero());
 
   useEffect(() => {
     activityRef.current = activity;
@@ -265,8 +277,26 @@ export default function CognitiveVoid({ graph, activity, phase }: CognitiveVoidP
   }, [phase]);
 
   useEffect(() => {
+    onSelectNodeRef.current = onSelectNode;
+  }, [onSelectNode]);
+
+  useEffect(() => {
+    selectedNodeIdRef.current = selectedNodeId;
+    const selectedMesh = selectedNodeId
+      ? sceneRef.current?.getMeshByName(`cog-node:${selectedNodeId}`)
+      : null;
+    focusTargetRef.current = selectedMesh?.position.clone() ?? Vector3.Zero();
+  }, [selectedNodeId]);
+
+  useEffect(() => {
     graphRef.current = graph;
-    if (sceneRef.current) renderGraph(sceneRef.current, graph);
+    if (sceneRef.current) {
+      renderGraph(sceneRef.current, graph);
+      const selectedMesh = selectedNodeIdRef.current
+        ? sceneRef.current.getMeshByName(`cog-node:${selectedNodeIdRef.current}`)
+        : null;
+      focusTargetRef.current = selectedMesh?.position.clone() ?? Vector3.Zero();
+    }
   }, [graph]);
 
   useEffect(() => {
@@ -314,9 +344,28 @@ export default function CognitiveVoid({ graph, activity, phase }: CognitiveVoidP
 
       renderGraph(scene, graphRef.current);
 
+      scene.onPointerObservable.add((pointerInfo) => {
+        if (pointerInfo.type !== PointerEventTypes.POINTERPICK) return;
+        const pickedMesh = pointerInfo.pickInfo?.pickedMesh;
+        if (pickedMesh?.metadata?.cognitiveNode) {
+          const nodeId = String(pickedMesh.metadata.id ?? "");
+          const node = graphRef.current.nodes.find((candidate) => candidate.id === nodeId) ?? null;
+          if (node) {
+            focusTargetRef.current = pickedMesh.position.clone();
+            onSelectNodeRef.current(node);
+            return;
+          }
+        }
+
+        focusTargetRef.current = Vector3.Zero();
+        onSelectNodeRef.current(null);
+      });
+
       scene.onBeforeRenderObservable.add(() => {
         const time = performance.now() * 0.001;
-        camera.alpha += 0.000045;
+        if (!selectedNodeIdRef.current) camera.alpha += 0.000045;
+        camera.target = Vector3.Lerp(camera.target, focusTargetRef.current, 0.075);
+
         const currentPhase = phaseRef.current;
         const phaseAmplitude = currentPhase === "model_inference" ? 0.11 : 0.075;
         const wave = Math.sin(time * (currentPhase ? 5.2 : 2.4) + activityRef.current * 0.31);
@@ -324,9 +373,12 @@ export default function CognitiveVoid({ graph, activity, phase }: CognitiveVoidP
         scene?.meshes.forEach((mesh) => {
           if (mesh.metadata?.cognitiveNode) {
             const kind = String(mesh.metadata.kind ?? "");
+            const nodeId = String(mesh.metadata.id ?? "");
             const active = participatesInPhase(kind, currentPhase);
+            const selected = nodeId === selectedNodeIdRef.current;
             const amplitude = active ? phaseAmplitude : kind === "self_model" ? 0.04 : 0.012;
-            mesh.scaling.setAll(1 + wave * amplitude);
+            const selectionScale = selected ? 1.28 : 1;
+            mesh.scaling.setAll(selectionScale * (1 + wave * amplitude));
             return;
           }
 
