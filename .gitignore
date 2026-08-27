@@ -14,7 +14,10 @@ dist/
 .cache/
 .vite/
 .turbo/
+Cache/
+Tools/npm-global/
 *.tsbuildinfo
+**/package-lock.json
 
 # Rust
 /target/
