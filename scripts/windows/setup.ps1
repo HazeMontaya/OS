@@ -15,8 +15,13 @@ if ([Environment]::OSVersion.Platform -ne [PlatformID]::Win32NT) {
     throw "OS-SETUP.cmd is intended for Windows."
 }
 
-if (-not (Test-OsCommand "winget")) {
-    throw "Windows Package Manager (winget) is missing. Install/repair Microsoft App Installer and run OS-SETUP.cmd again."
+# WinGet is only an installer transport. It is not a runtime requirement.
+# Reuse an already complete machine instead of blocking setup merely because
+# Microsoft App Installer / winget is missing.
+if (Test-OsCommand "winget") {
+    Write-OsOk ("Windows Package Manager available: " + (& winget --version))
+} else {
+    Write-OsWarn "Windows Package Manager is unavailable. Existing components will be reused; winget is only required if OS must install a missing package."
 }
 
 Write-OsStep "Checking source/build toolchain ..."
@@ -26,6 +31,9 @@ Ensure-WingetPackage -Command "rustup" -PackageId "Rustlang.Rustup" -DisplayName
 Refresh-OsPath
 
 if (-not (Test-MsvcBuildTools)) {
+    if (-not (Test-OsCommand "winget")) {
+        throw "Microsoft C++ Build Tools are missing and winget is unavailable. Install Visual Studio 2022 Build Tools with the C++ workload, then rerun OS-SETUP.cmd."
+    }
     Write-OsStep "Installing Microsoft C++ Build Tools for Tauri/Rust ..."
     $vsArgs = @(
         "install", "--id", "Microsoft.VisualStudio.2022.BuildTools", "-e", "--source", "winget",
@@ -34,7 +42,7 @@ if (-not (Test-MsvcBuildTools)) {
     )
     Invoke-OsNative "winget" @vsArgs
     if (-not (Test-MsvcBuildTools)) {
-        throw "Visual Studio C++ Build Tools were installed but are not visible yet. Restart Windows once, then run OS-SETUP.cmd again; the setup will continue without reinstalling completed components."
+        throw "Visual Studio C++ Build Tools were installed but are not visible yet. Restart Windows once, then run OS-SETUP.cmd again; setup will continue without reinstalling completed components."
     }
 }
 Write-OsOk "Microsoft C++ Build Tools available."
@@ -111,10 +119,24 @@ if (-not (Ensure-OllamaServer)) {
 Write-OsOk "Ollama local API online."
 
 if (-not $SkipModels) {
-    Write-OsStep "Ensuring local chat model llama3.2:3b ..."
-    Invoke-OsNative "ollama" "pull" "llama3.2:3b"
-    Write-OsStep "Ensuring local embedding model nomic-embed-text ..."
-    Invoke-OsNative "ollama" "pull" "nomic-embed-text"
+    $chatModel = $env:OS_LLAMA_MODEL
+    $embedModel = $env:OS_EMBED_MODEL
+
+    Write-OsStep "Ensuring local chat model $chatModel ..."
+    Invoke-OsNative "ollama" "pull" $chatModel
+    Write-OsStep "Ensuring local embedding model $embedModel ..."
+    Invoke-OsNative "ollama" "pull" $embedModel
+
+    $installedModels = (& ollama list 2>$null | Out-String)
+    if ($LASTEXITCODE -ne 0) {
+        throw "Ollama model registry could not be queried after provisioning."
+    }
+    foreach ($model in @($chatModel, $embedModel)) {
+        if ($installedModels -notmatch ("(?m)^" + [regex]::Escape($model) + "\s")) {
+            throw "Ollama model provisioning did not produce the required model: $model"
+        }
+    }
+    Write-OsOk "Required local Ollama models are installed."
 }
 
 Write-OsStep "Installing JavaScript workspace dependencies ..."
@@ -130,8 +152,6 @@ Invoke-OsNative "pnpm" "typecheck"
 
 if (-not $SkipBuild) {
     Write-OsStep "Building and marking the startable Windows release executable ..."
-    # build.ps1 already turns every failed native command into a terminating error.
-    # Rely on that contract instead of inspecting LASTEXITCODE from a nested script.
     & (Join-Path $PSScriptRoot "build.ps1") -NoValidation
 }
 
@@ -144,7 +164,6 @@ Write-Host "Diagnostics:      OS-DOCTOR.cmd" -ForegroundColor Yellow
 Write-Host "Installer build:  OS-BUILD.cmd --installer" -ForegroundColor Yellow
 
 if ($Launch) {
-    # start.ps1 also uses terminating errors. If it returns, startup was accepted.
     & (Join-Path $PSScriptRoot "start.ps1")
     exit 0
 }
