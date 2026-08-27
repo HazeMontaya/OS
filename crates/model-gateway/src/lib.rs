@@ -124,6 +124,8 @@ pub enum ModelGatewayError {
     Client(#[source] reqwest::Error),
     #[error("model transport failed: {0}")]
     Transport(#[from] reqwest::Error),
+    #[error("model server returned no models")]
+    NoModels,
     #[error("model server returned no assistant text")]
     EmptyResponse,
 }
@@ -147,6 +149,10 @@ impl LlamaCppClient {
         Self::new(LlamaCppConfig::local(model))
     }
 
+    pub fn configured_model(&self) -> &str {
+        &self.config.model
+    }
+
     pub async fn models(&self) -> Result<Vec<String>, ModelGatewayError> {
         let response = self
             .authorize(self.client.get(self.endpoint("/v1/models")))
@@ -164,8 +170,29 @@ impl LlamaCppClient {
         max_tokens: u32,
         temperature: f32,
     ) -> Result<ModelCompletion, ModelGatewayError> {
+        let model = if self.config.model.trim().is_empty() {
+            self.models()
+                .await?
+                .into_iter()
+                .next()
+                .ok_or(ModelGatewayError::NoModels)?
+        } else {
+            self.config.model.clone()
+        };
+
+        self.chat_with_model(&model, messages, max_tokens, temperature)
+            .await
+    }
+
+    pub async fn chat_with_model(
+        &self,
+        model: &str,
+        messages: &[ChatMessage],
+        max_tokens: u32,
+        temperature: f32,
+    ) -> Result<ModelCompletion, ModelGatewayError> {
         let body = ChatCompletionRequest {
-            model: &self.config.model,
+            model,
             messages,
             max_tokens,
             temperature: temperature.clamp(0.0, 2.0),
@@ -189,7 +216,7 @@ impl LlamaCppClient {
 
         Ok(ModelCompletion {
             text,
-            model: response.model.unwrap_or_else(|| self.config.model.clone()),
+            model: response.model.unwrap_or_else(|| model.to_string()),
             prompt_tokens: response.usage.as_ref().and_then(|usage| usage.prompt_tokens),
             completion_tokens: response
                 .usage
@@ -276,9 +303,7 @@ fn extract_text(content: &Value) -> Option<String> {
 
 #[cfg(test)]
 mod tests {
-    use super::{
-        extract_text, LlamaCppClient, ModelDescriptor, ModelKind, ModelRegistry,
-    };
+    use super::{extract_text, LlamaCppClient, ModelDescriptor, ModelKind, ModelRegistry};
     use serde_json::json;
 
     #[test]
@@ -311,8 +336,9 @@ mod tests {
 
     #[test]
     fn local_client_targets_llama_server_v1() {
-        let client = LlamaCppClient::local("local-model").expect("create local client");
+        let client = LlamaCppClient::local("").expect("create local client");
         assert_eq!(client.endpoint("/v1/models"), "http://127.0.0.1:8080/v1/models");
+        assert_eq!(client.configured_model(), "");
     }
 
     #[test]
