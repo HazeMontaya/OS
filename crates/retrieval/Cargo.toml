@@ -6,3 +6,6 @@ publish = false
 
 [dependencies]
 os-storage = { path = "../storage" }
+
+[dev-dependencies]
+os-contracts = { path = "../contracts" }
