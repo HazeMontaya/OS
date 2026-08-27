@@ -1,95 +1,120 @@
 .spatial-navigator {
   position: absolute;
-  z-index: 3;
-  left: 28px;
-  top: 92px;
+  z-index: 9;
+  left: 30px;
+  top: 94px;
   display: flex;
   align-items: stretch;
   gap: 7px;
   pointer-events: none;
 }
 
-.spatial-navigator > * {
-  pointer-events: auto;
-}
+.spatial-navigator > * { pointer-events: auto; }
 
 .spatial-level,
 .spatial-cluster,
 .spatial-navigator button,
 .spatial-hover-readout {
-  border: 1px solid rgba(137, 204, 255, 0.1);
-  background: linear-gradient(180deg, rgba(10, 20, 34, 0.6), rgba(3, 8, 15, 0.48));
-  box-shadow: 0 12px 40px rgba(0, 0, 0, 0.24), inset 0 1px 0 rgba(255, 255, 255, 0.025);
-  backdrop-filter: blur(18px) saturate(125%);
+  border: 1px solid color-mix(in srgb, var(--os-gold) 15%, transparent);
+  background:
+    linear-gradient(180deg, color-mix(in srgb, var(--os-surface-raised) 91%, transparent), color-mix(in srgb, var(--os-canvas) 90%, transparent));
+  box-shadow:
+    0 20px 60px rgba(0, 0, 0, 0.42),
+    inset 0 1px 0 color-mix(in srgb, var(--os-gold-soft) 5%, transparent),
+    inset 0 0 30px color-mix(in srgb, var(--os-gold) 2.8%, transparent);
+  backdrop-filter: blur(22px) saturate(112%);
 }
 
 .spatial-level,
 .spatial-cluster {
-  min-height: 45px;
+  min-height: 47px;
   display: grid;
   align-content: center;
-  gap: 2px;
-  padding: 7px 11px;
-  border-radius: 12px;
+  gap: 3px;
+  padding: 7px 12px;
+  border-radius: 10px;
+}
+
+.spatial-level::before,
+.spatial-cluster::before {
+  content: "";
+  position: absolute;
+  width: 1px;
+  height: 17px;
+  margin-left: -12px;
+  background: linear-gradient(180deg, transparent, var(--os-gold-bright), transparent);
+  opacity: 0.58;
 }
 
 .spatial-level span,
 .spatial-cluster span,
 .spatial-hover-readout span {
-  color: rgba(195, 221, 245, 0.31);
-  font-size: 7px;
-  letter-spacing: 0.13em;
+  color: var(--os-text-faint);
+  font: 650 7px/1.1 "Cascadia Code", "Segoe UI", monospace;
+  letter-spacing: 0.16em;
   text-transform: uppercase;
 }
 
 .spatial-level strong,
 .spatial-cluster strong,
 .spatial-hover-readout strong {
-  color: rgba(231, 246, 255, 0.78);
+  color: var(--os-text);
   font-size: 9px;
-  font-weight: 640;
-  letter-spacing: 0.1em;
+  font-weight: 650;
+  letter-spacing: 0.105em;
 }
 
 .spatial-level strong {
-  color: rgba(122, 211, 255, 0.86);
+  color: var(--os-gold-bright);
+  text-shadow: 0 0 18px color-mix(in srgb, var(--os-gold) 22%, transparent);
 }
 
 .spatial-cluster small,
 .spatial-hover-readout small {
-  color: rgba(199, 223, 245, 0.34);
-  font-size: 7px;
-  letter-spacing: 0.06em;
+  color: var(--os-text-faint);
+  font: 500 7px/1.2 "Cascadia Code", "Segoe UI", monospace;
+  letter-spacing: 0.055em;
 }
 
 .spatial-navigator button {
   align-self: stretch;
-  border-radius: 12px;
-  padding: 0 11px;
-  color: rgba(211, 234, 253, 0.48);
-  font-size: 8px;
-  letter-spacing: 0.12em;
+  border-radius: 10px;
+  padding: 0 12px;
+  color: var(--os-text-muted);
+  font: 650 8px/1 "Segoe UI", sans-serif;
+  letter-spacing: 0.15em;
   cursor: pointer;
+  transition: border-color 160ms ease, color 160ms ease, background 160ms ease, box-shadow 160ms ease;
 }
 
 .spatial-navigator button:hover {
-  color: rgba(242, 250, 255, 0.94);
-  border-color: rgba(129, 207, 255, 0.22);
-  background: rgba(91, 178, 239, 0.09);
+  color: var(--os-gold-soft);
+  border-color: color-mix(in srgb, var(--os-gold-bright) 34%, transparent);
+  background: color-mix(in srgb, var(--os-gold) 8%, var(--os-canvas));
+  box-shadow: 0 0 24px color-mix(in srgb, var(--os-gold) 8%, transparent);
 }
 
 .spatial-hover-readout {
   position: absolute;
-  z-index: 5;
-  left: 28px;
-  bottom: 106px;
-  min-width: 200px;
-  max-width: min(340px, calc(100vw - 56px));
+  z-index: 11;
+  left: 30px;
+  bottom: 112px;
+  min-width: 230px;
+  max-width: min(380px, calc(100vw - 60px));
   display: grid;
-  gap: 4px;
-  padding: 10px 12px;
-  border-radius: 13px;
+  gap: 5px;
+  padding: 11px 14px 12px 17px;
+  border-radius: 10px;
   pointer-events: none;
+}
+
+.spatial-hover-readout::before {
+  content: "";
+  position: absolute;
+  inset: 9px auto 9px 0;
+  width: 1px;
+  background: linear-gradient(180deg, transparent, var(--os-gold-bright), transparent);
+  box-shadow: 0 0 14px var(--os-gold);
 }
 
 .spatial-hover-readout strong {
@@ -98,20 +123,15 @@
   white-space: nowrap;
 }
 
-.spatial-navigator.node-selected {
-  left: 382px;
-}
+.spatial-navigator.node-selected { left: 390px; }
 
 @media (max-width: 1180px) {
   .spatial-navigator.node-selected {
-    left: 28px;
+    left: 30px;
     top: auto;
-    bottom: 106px;
+    bottom: 112px;
   }
-
-  .spatial-navigator.node-selected + .spatial-hover-readout {
-    display: none;
-  }
+  .spatial-navigator.node-selected + .spatial-hover-readout { display: none; }
 }
 
 @media (max-width: 960px) {
@@ -121,18 +141,14 @@
     top: 82px;
     bottom: auto;
   }
-
   .spatial-hover-readout {
     left: 14px;
-    bottom: 94px;
+    bottom: 96px;
   }
 }
 
 @media (max-width: 620px) {
-  .spatial-cluster {
-    display: none;
-  }
-
+  .spatial-cluster { display: none; }
   .spatial-hover-readout {
     right: 14px;
     max-width: none;
