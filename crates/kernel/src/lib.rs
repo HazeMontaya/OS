@@ -79,7 +79,7 @@ impl Kernel {
             source: "desktop.command_bar".into(),
             actor: "user".into(),
             event_type: "user.input".into(),
-            payload: json!({ "content": content }),
+            payload: json!({ "content": content.clone() }),
             context_id: None,
             session_id: None,
             project_id: None,
