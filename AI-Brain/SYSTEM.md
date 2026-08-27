@@ -1,16 +1,14 @@
-# OS System
+﻿# AI Brain — System
 
-OS is a local-first AI operating environment. Its purpose is to coordinate models, tools, memory, workflows and integrations through one observable control plane.
+## Source of Truth
+Dieser Vault unter `S:\OS\AI-Brain` ist die kontrollierbare, portable Wissensbasis.
 
-## Invariants
-
-1. Preserve user data and project history.
-2. Route privileged actions through the policy layer.
-3. Never store credentials in source control.
-4. Keep runtime services independently testable.
-5. Record important actions in audit/event streams.
-6. Prefer explicit capabilities over hidden implicit powers.
-7. Keep external integrations replaceable through adapters.
-8. Make system state visible in the UI.
-
-The core agent may reason broadly, but execution authority is determined by tool capability and policy.
+## Grundregeln
+1. Bestehende Fakten nicht still überschreiben.
+2. Quellen und Datum festhalten, wenn relevant.
+3. Widersprüche markieren statt erraten.
+4. Keine Passwörter, Tokens oder API-Keys in Markdown/Git.
+5. Löschen und externe Aktionen nur nach ausdrücklicher Freigabe.
+6. Inbox-Inhalte klassifizieren und anschließend in den passenden Bereich verschieben.
+7. Dauerhafte Erkenntnisse deduplizieren und als Memory konsolidieren.
+8. Vor wichtigen Änderungen Git-Status prüfen; Änderungen klein und rückrollbar halten.

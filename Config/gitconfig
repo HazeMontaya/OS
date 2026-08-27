@@ -1,7 +1,7 @@
 [user]
-	name = AI Brain
-	email = ai-brain@local.invalid
+    name = AI Brain
+    email = ai-brain@local.invalid
 [credential]
-	helper = manager
+    helper = manager
 [http]
-	sslBackend = schannel
+    sslBackend = schannel

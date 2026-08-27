@@ -1,34 +1,71 @@
-function extractJson(text) {
-  const raw = String(text || '').trim();
-  try { return JSON.parse(raw); } catch {}
-  const fenced = raw.match(/```(?:json)?\s*([\s\S]*?)```/i); if (fenced) { try { return JSON.parse(fenced[1]); } catch {} }
-  const first = raw.indexOf('{'); const last = raw.lastIndexOf('}'); if (first >= 0 && last > first) { try { return JSON.parse(raw.slice(first, last + 1)); } catch {} }
-  return null;
-}
-export function createAgent({ tools, providers, memory, config, audit, events }) {
-  async function run({ prompt, provider, model, remember = false, approved = false }) {
-    if (!String(prompt || '').trim()) throw new Error('prompt is required');
-    const relevantMemory = memory.search(prompt, 8); const catalog = tools.list(); const toolResults = [];
-    let transcript = ['You are OS, a local-first AI operating environment.','Respond with exactly one JSON object and no markdown.','Allowed forms:','{"action":"answer","answer":"..."}','{"action":"tool","tool":"tool.name","args":{},"reason":"..."}','Use a tool only when it materially improves the result.',`Tools: ${JSON.stringify(catalog)}`,`Relevant memory: ${JSON.stringify(relevantMemory)}`,`User request: ${String(prompt)}`].join('\n');
-    for (let iteration = 1; iteration <= Number(config.autonomy?.maxToolIterations || 8); iteration++) {
-      const generated = await providers.generate(transcript, provider, model); const decision = extractJson(generated.text);
-      if (!decision) return { answer: generated.text, provider: generated.provider, model: generated.model, iterations: iteration, toolResults };
-      if (decision.action === 'answer') {
-        const answer = String(decision.answer || '');
-        if (remember && answer) memory.add({ text: answer, type: 'episodic', source: 'agent', tags: ['agent-output'], metadata: { provider: generated.provider, model: generated.model } });
-        audit?.append('agent.completed', { provider: generated.provider, model: generated.model, iterations: iteration, toolCalls: toolResults.length }); events?.publish('agent.completed', { iterations: iteration, toolCalls: toolResults.length });
-        return { answer, provider: generated.provider, model: generated.model, iterations: iteration, toolResults };
+import { addMemory, searchMemory, getVaultContext } from './memory.mjs';
+import { vaultWrite, vaultUpdateIndex } from './vault.mjs';
+import { log } from './logger.mjs';
+import { createEvolutionEngine, recordInteraction } from './evolution.mjs';
+import { addEntity, addRelation, addConcept, searchEntities, searchConcepts, getKnowledgeStats } from './knowledge-graph.mjs';
+import { fullInspection, securityAudit, inspectRuntime } from './self-inspect.mjs';
+
+export function createAgent({ tools, providers, config }) {
+  const evolution = createEvolutionEngine({ tools, providers });
+
+  async function runToolLoop(prompt, preferredProvider, preferredModel, remember) {
+    const memory = searchMemory(prompt, 8);
+    const vaultContext = getVaultContext(prompt, 3);
+    const toolCatalog = tools.list();
+    const evoState = evolution.state();
+    const kgStats = getKnowledgeStats();
+
+    const systemParts = [
+      'You are the local OS agent. Return only valid JSON.',
+      'Choose one of two forms:',
+      '{"action":"answer","answer":"..."}',
+      '{"action":"tool","tool":"tool.name","args":{},"reason":"..."}',
+      `Available tools: ${JSON.stringify(toolCatalog)}`,
+      `Relevant memory: ${JSON.stringify(memory)}`,
+      `OS knowledge: ${kgStats.entities} entities, ${kgStats.concepts} concepts, version ${evoState.version}`,
+    ];
+    if (vaultContext.length > 0) systemParts.push(`Relevant vault notes: ${JSON.stringify(vaultContext)}`);
+    systemParts.push(`User request: ${prompt}`);
+    const system = systemParts.join('\n');
+    let transcript = system;
+    const toolCalls = [];
+    for (let i = 0; i < config.autonomy.maxToolIterations; i++) {
+      const generated = await providers.generate(transcript, preferredProvider, preferredModel);
+      let parsed;
+      try { parsed = JSON.parse(generated.text); }
+      catch {
+        recordInteraction(prompt, generated, toolCalls);
+        return { provider: generated.provider, model: generated.model, answer: generated.text, iterations: i + 1, toolResults: [] };
       }
-      if (decision.action !== 'tool' || !tools.has(decision.tool)) return { answer: generated.text, provider: generated.provider, model: generated.model, iterations: iteration, toolResults };
-      const tool = tools.get(decision.tool);
-      if (tool.mutating && config.policy?.requireApprovalForMutations && approved !== true) {
-        audit?.append('agent.approval_required', { tool: decision.tool, reason: decision.reason || null }); events?.publish('approval.required', { tool: decision.tool, args: decision.args || {}, reason: decision.reason || '' });
-        return { answer: decision.reason || `Approval required for ${decision.tool}`, provider: generated.provider, model: generated.model, iterations: iteration, toolResults, pendingAction: { tool: decision.tool, args: decision.args || {}, reason: decision.reason || '', capability: tool.capability } };
+      if (parsed.action === 'answer') {
+        recordInteraction(prompt, generated, toolCalls);
+        return { provider: generated.provider, model: generated.model, answer: String(parsed.answer || ''), iterations: i + 1 };
       }
-      const result = await tools.execute(decision.tool, decision.args || {}, { approved: approved === true, subject: 'agent' });
-      toolResults.push({ tool: decision.tool, result }); transcript += `\nTool result (${decision.tool}): ${JSON.stringify(result)}\nContinue with one JSON object.`;
+      if (parsed.action !== 'tool' || !tools.has(parsed.tool)) {
+        recordInteraction(prompt, generated, toolCalls);
+        return { provider: generated.provider, model: generated.model, answer: generated.text, iterations: i + 1 };
+      }
+      const result = await tools.execute(parsed.tool, parsed.args || {});
+      toolCalls.push({ tool: parsed.tool, args: parsed.args, result: typeof result === 'string' ? result.substring(0, 200) : 'ok' });
+      log('info', 'agent.tool', { tool: parsed.tool, provider: generated.provider, model: generated.model });
+      transcript += `\nTool result for ${parsed.tool}: ${JSON.stringify(result)}\nContinue. Return JSON only.`;
     }
     throw new Error('Agent reached maximum tool iterations');
   }
-  return { run };
+  return {
+    run: async ({ prompt, provider, model, remember = false }) => {
+      if (!prompt) throw new Error('prompt is required');
+      const result = await runToolLoop(String(prompt), provider, model, remember);
+      if (remember && result.answer) {
+        addMemory({ text: result.answer, type: 'episodic', source: 'agent', tags: ['agent-output'], metadata: { provider: result.provider, model: result.model } });
+        addConcept(prompt.substring(0, 100), result.answer.substring(0, 500), ['agent-interaction']);
+      }
+      return result;
+    },
+    evolution,
+    inspect: fullInspection,
+    securityAudit,
+    knowledge: { addEntity, addRelation, addConcept, searchEntities, searchConcepts, stats: getKnowledgeStats },
+    selfReport: () => ({ evolution: evolution.report(), knowledge: getKnowledgeStats(), inspection: fullInspection() })
+  };
 }

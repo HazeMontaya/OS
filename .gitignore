@@ -1,52 +1,46 @@
-# Build output
-Release/
-dist/
-coverage/
+# OS - Git Ignore
 
-# Runtime and mutable local state
-Logs/
-Data/Runtime/
-Data/Memory/
+# System
 Cache/
-Downloads/
-Temp/
-Recovery/
-
-# Large/local binaries and models
-Apps/
-Runtime/Node/
-Tools/
-Models/*
-!Models/README.md
-
-# Node
+Logs/
 node_modules/
-.npm/
-
-# Provider/application caches
-Config/Claude/backups/
-Config/Claude/cache/
-Config/Claude/.claude.json
-Config/Codex/
-Config/Obsidian/
-Config/OpenCode/node_modules/
-
-# Secrets
+*.log
 .env
-.env.*
-!.env.example
-*.pem
-*.key
-
-# IDE / OS
-.vs/
-.vscode/*.local.*
-.idea/
-Thumbs.db
-Desktop.ini
 .DS_Store
+Thumbs.db
 
-# Nested repositories and scratch
-AI-Brain/.git/
-AI-Brain/.git_ai_brain_backup/
-Workspace/Development/
+# Obsidian Data (runtime)
+Data/Obsidian/
+
+# Runtime Data
+Data/Evolution/
+Data/Memory/
+Data/KnowledgeGraph/
+
+# Electron Binaries
+*.exe
+*.dll
+*.bin
+*.dat
+*.pak
+*.asar
+*.com
+
+# Obsidian Binaries
+Obsidian/
+
+# Electron Config
+LICENSES.chromium.html
+LICENSE.electron.txt
+version
+vk_swiftshader_icd.json
+resources/app/
+
+# Root Config
+.obsidian/
+AI-Brain/.obsidian/
+
+# Build
+resources.pak
+snapshot_blob.bin
+Docs/FREE-API-KEYS.md

@@ -1,42 +1,36 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { WORKSPACE_DIR } from './paths.mjs';
+import { addMemory } from './memory.mjs';
 
-const DIR = path.join(WORKSPACE_DIR, 'Workflows');
-function loadDefinitions() {
-  if (!fs.existsSync(DIR)) return [];
-  return fs.readdirSync(DIR).filter((name) => name.endsWith('.json')).flatMap((name) => {
-    try { const value = JSON.parse(fs.readFileSync(path.join(DIR, name), 'utf8')); return value?.id ? [{ ...value, file: name }] : []; } catch { return []; }
-  });
+const dir = path.join(WORKSPACE_DIR, 'Workflows');
+function readJsonFiles() {
+  fs.mkdirSync(dir, { recursive: true });
+  return fs.readdirSync(dir).filter((name) => name.endsWith('.json')).map((name) => ({ file: name, ...JSON.parse(fs.readFileSync(path.join(dir, name), 'utf8').replace(/^\uFEFF/, '')) }));
 }
 function interpolate(value, context) {
-  if (typeof value === 'string') return value.replace(/\{\{([^}]+)\}\}/g, (_, key) => {
-    const parts = key.trim().split('.'); let current = context; for (const part of parts) current = current?.[part];
-    return current == null ? '' : typeof current === 'string' ? current : JSON.stringify(current);
-  });
-  if (Array.isArray(value)) return value.map((item) => interpolate(item, context));
-  if (value && typeof value === 'object') return Object.fromEntries(Object.entries(value).map(([key, item]) => [key, interpolate(item, context)]));
+  if (typeof value === 'string') return value.replace(/\{\{([^}]+)\}\}/g, (_, key) => String(context[key.trim()] ?? ''));
+  if (Array.isArray(value)) return value.map((v) => interpolate(v, context));
+  if (value && typeof value === 'object') return Object.fromEntries(Object.entries(value).map(([k, v]) => [k, interpolate(v, context)]));
   return value;
 }
-export function createWorkflowEngine({ tools, providers, audit, events }) {
-  function list() { return loadDefinitions().map(({ steps = [], ...workflow }) => ({ ...workflow, stepCount: steps.length })); }
-  async function run(id, input = {}, context = {}) {
-    const workflow = loadDefinitions().find((item) => item.id === id);
-    if (!workflow) throw new Error(`Unknown workflow: ${id}`);
-    const state = { input, steps: {}, startedAt: new Date().toISOString() };
-    events?.publish('workflow.started', { id });
-    for (const [index, step] of (workflow.steps || []).entries()) {
-      const stepId = step.saveAs || step.id || `step-${index + 1}`;
-      const expanded = interpolate(step, state);
-      if (step.type === 'tool') state.steps[stepId] = await tools.execute(expanded.tool, expanded.args || {}, context);
-      else if (step.type === 'prompt') state.steps[stepId] = await providers.generate(expanded.prompt || '', expanded.provider, expanded.model);
-      else throw new Error(`Unsupported workflow step type: ${step.type}`);
-      events?.publish('workflow.step', { id, stepId });
+export function createWorkflowEngine({ tools, providers }) {
+  return {
+    list: () => readJsonFiles(),
+    run: async (id, input = {}) => {
+      const workflow = readJsonFiles().find((x) => x.id === id || x.file === id);
+      if (!workflow) throw new Error(`Workflow not found: ${id}`);
+      const context = { ...input }; const results = [];
+      for (const step of workflow.steps || []) {
+        let result;
+        if (step.type === 'tool') result = await tools.execute(step.tool, interpolate(step.args || {}, context));
+        else if (step.type === 'memory') result = addMemory(interpolate(step.memory || {}, context));
+        else if (step.type === 'agent') result = await providers.generate(interpolate(step.prompt || '', context), step.provider, step.model);
+        else throw new Error(`Unsupported workflow step type: ${step.type}`);
+        results.push({ id: step.id || `step-${results.length + 1}`, type: step.type, result });
+        if (step.saveAs) context[step.saveAs] = typeof result === 'string' ? result : JSON.stringify(result);
+      }
+      return { workflow: workflow.id, context, results };
     }
-    state.completedAt = new Date().toISOString();
-    audit?.append('workflow.run', { workflow: id, steps: Object.keys(state.steps).length });
-    events?.publish('workflow.completed', { id });
-    return state;
-  }
-  return { list, run };
+  };
 }

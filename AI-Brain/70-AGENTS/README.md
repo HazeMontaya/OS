@@ -1,4 +1,4 @@
-﻿# Agent Registry
+# Agent Registry
 
 Empfohlene Rollen:
 - Supervisor / Router

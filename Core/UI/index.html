@@ -1,179 +1,62 @@
-<!doctype html>
+<!DOCTYPE html>
 <html lang="de">
 <head>
-  <meta charset="utf-8">
-  <meta name="viewport" content="width=device-width,initial-scale=1">
-  <meta name="color-scheme" content="dark">
-  <title>OS · AI Operating Environment</title>
-  <link rel="stylesheet" href="/styles.css">
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>OS — Immersive AI</title>
+<link rel="stylesheet" href="/styles.css">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
 </head>
 <body>
-  <div class="shell">
-    <aside class="sidebar">
-      <div class="brand">
-        <div class="brand-mark">OS</div>
-        <div><strong>Operating System</strong><span>AI control plane</span></div>
-      </div>
-      <nav id="nav">
-        <button class="nav-item active" data-view="command">⌁ <span>Command</span></button>
-        <button class="nav-item" data-view="overview">◫ <span>Overview</span></button>
-        <button class="nav-item" data-view="agents">◎ <span>Agents</span></button>
-        <button class="nav-item" data-view="workflows">◇ <span>Workflows</span></button>
-        <button class="nav-item" data-view="memory">◉ <span>Memory</span></button>
-        <button class="nav-item" data-view="tools">⌘ <span>Tools & MCP</span></button>
-        <button class="nav-item" data-view="security">▣ <span>Security</span></button>
-      </nav>
-      <div class="sidebar-foot">
-        <span id="connectionDot" class="dot"></span>
-        <div><strong id="connectionLabel">Connecting</strong><span id="versionLabel">OS</span></div>
-      </div>
-    </aside>
+<canvas id="bg3d"></canvas>
+<div id="hud">
+  <header id="topbar">
+    <div class="brand">
+      <div class="orb" id="aiOrb"><div class="orb-ring"></div><div class="orb-ring r2"></div><div class="orb-core"></div></div>
+      <div><h1>OS</h1><p class="sub" id="status">INITIALIZING…</p></div>
+    </div>
+    <div class="stats" id="stats"></div>
+  </header>
 
-    <main class="main">
-      <header class="topbar">
-        <div>
-          <h1 id="viewTitle">Command Center</h1>
-          <p id="viewSubtitle">Chat, tools, approvals and execution state</p>
+  <div id="mainGrid">
+    <section class="glass panel-chat" id="chatPanel">
+      <h2><span class="icon">⚡</span> Neural Link</h2>
+      <div id="chatLog" class="chat-log"></div>
+      <form id="chatForm" class="chat-input">
+        <textarea id="prompt" rows="2" placeholder="Aufgabe an OS…" required></textarea>
+        <div class="row">
+          <select id="model"><option value="">Modell auto</option></select>
+          <select id="provider"><option value="">Provider auto</option></select>
+          <label class="toggle"><input id="remember" type="checkbox"><span class="slider"></span>Merken</label>
+          <button type="submit" id="sendBtn"><span class="btn-glow"></span>Ausführen</button>
         </div>
-        <div class="top-actions">
-          <span id="modeBadge" class="badge">supervised</span>
-          <button id="refreshButton" class="ghost">Refresh</button>
-        </div>
-      </header>
+      </form>
+    </section>
 
-      <section class="view active" data-view-panel="command">
-        <div class="command-layout">
-          <section class="panel command-panel">
-            <div class="panel-head">
-              <div><h2>Jarvis Interface</h2><p>One interface for models, memory and tools.</p></div>
-              <span class="status-chip" id="providerStatus">Provider auto</span>
-            </div>
-            <form id="chatForm">
-              <textarea id="prompt" rows="7" placeholder="Aufgabe an OS…" required></textarea>
-              <div class="composer-row">
-                <select id="provider"><option value="">Provider automatisch</option></select>
-                <select id="model"><option value="">Modell automatisch</option></select>
-                <label class="check"><input id="remember" type="checkbox"> Memory</label>
-                <button type="submit" class="primary">Ausführen</button>
-              </div>
-            </form>
-            <div id="approvalCard" class="approval hidden">
-              <div><strong>Freigabe erforderlich</strong><p id="approvalReason"></p></div>
-              <button id="approveButton" class="danger">Aktion freigeben</button>
-            </div>
-            <div class="answer-wrap">
-              <div class="answer-meta"><span>OS output</span><span id="answerMeta">Bereit</span></div>
-              <pre id="answer">Bereit.</pre>
-            </div>
-          </section>
-
-          <aside class="stack">
-            <section class="panel">
-              <div class="panel-head"><div><h2>Live State</h2><p>Kernel snapshot</p></div></div>
-              <div id="quickStats" class="metric-grid"></div>
-            </section>
-            <section class="panel">
-              <div class="panel-head"><div><h2>Activity</h2><p>Latest runtime events</p></div></div>
-              <div id="activityMini" class="activity-list"></div>
-            </section>
-          </aside>
-        </div>
+    <div id="sidePanels">
+      <section class="glass panel-memory">
+        <h2><span class="icon">🧠</span> Memory</h2>
+        <div id="memory"></div>
+        <form id="memoryForm" class="mini-form"><input id="memoryText" placeholder="Memory hinzufügen" required><button>+</button></form>
       </section>
-
-      <section class="view" data-view-panel="overview">
-        <div id="overviewStats" class="metric-grid large"></div>
-        <div class="grid two">
-          <section class="panel">
-            <div class="panel-head"><div><h2>AI topology</h2><p>Runtime relationships at a glance</p></div></div>
-            <div id="topology" class="topology" aria-label="AI topology visualization"></div>
-          </section>
-          <section class="panel">
-            <div class="panel-head"><div><h2>Providers</h2><p>Configured inference transports</p></div></div>
-            <div id="providersList" class="card-list"></div>
-          </section>
-        </div>
-        <section class="panel">
-          <div class="panel-head"><div><h2>Activity stream</h2><p>Tools, providers, workflows and approvals</p></div></div>
-          <div id="activityFull" class="activity-list full"></div>
-        </section>
+      <section class="glass panel-tools">
+        <h2><span class="icon">🔧</span> Tools</h2>
+        <div id="tools"></div>
       </section>
-
-      <section class="view" data-view-panel="agents">
-        <div class="grid two">
-          <section class="panel">
-            <div class="panel-head"><div><h2>OS Core Agent</h2><p>Primary orchestration agent</p></div><span class="badge good">active</span></div>
-            <div id="agentDetails" class="detail-grid"></div>
-          </section>
-          <section class="panel">
-            <div class="panel-head"><div><h2>Execution model</h2><p>How OS resolves a task</p></div></div>
-            <ol class="steps">
-              <li><span>1</span><div><strong>Context</strong><p>Relevant memory + available tools.</p></div></li>
-              <li><span>2</span><div><strong>Plan</strong><p>Provider selects answer or tool action.</p></div></li>
-              <li><span>3</span><div><strong>Policy</strong><p>Capabilities and approvals are checked.</p></div></li>
-              <li><span>4</span><div><strong>Execute</strong><p>Tool result returns to the reasoning loop.</p></div></li>
-              <li><span>5</span><div><strong>Audit</strong><p>Important actions become traceable records.</p></div></li>
-            </ol>
-          </section>
-        </div>
+      <section class="glass panel-workflows">
+        <h2><span class="icon">⚙️</span> Workflows</h2>
+        <div id="workflows"></div>
       </section>
-
-      <section class="view" data-view-panel="workflows">
-        <div class="grid two">
-          <section class="panel">
-            <div class="panel-head"><div><h2>Workflows</h2><p>Declarative multi-step execution</p></div></div>
-            <div id="workflowsList" class="card-list"></div>
-          </section>
-          <section class="panel">
-            <div class="panel-head"><div><h2>Automations</h2><p>Scheduled workflow triggers</p></div></div>
-            <div id="automationsList" class="card-list"></div>
-          </section>
-        </div>
-      </section>
-
-      <section class="view" data-view-panel="memory">
-        <section class="panel">
-          <div class="panel-head"><div><h2>Memory Explorer</h2><p>Search and add local runtime memory</p></div></div>
-          <form id="memoryForm" class="memory-form">
-            <input id="memoryText" placeholder="Neue Memory…" required>
-            <button class="primary">Speichern</button>
-          </form>
-          <div class="search-row">
-            <input id="memorySearch" placeholder="Memory durchsuchen…">
-          </div>
-          <div id="memoryList" class="memory-list"></div>
-        </section>
-      </section>
-
-      <section class="view" data-view-panel="tools">
-        <div class="grid two">
-          <section class="panel">
-            <div class="panel-head"><div><h2>Tool Registry</h2><p>Capabilities exposed to agents</p></div></div>
-            <div id="toolsList" class="card-list"></div>
-          </section>
-          <section class="panel">
-            <div class="panel-head">
-              <div><h2>MCP</h2><p>External Model Context Protocol servers</p></div>
-              <button id="discoverMcp" class="ghost">Discover</button>
-            </div>
-            <div id="mcpList" class="card-list"></div>
-          </section>
-        </div>
-      </section>
-
-      <section class="view" data-view-panel="security">
-        <div class="grid two">
-          <section class="panel">
-            <div class="panel-head"><div><h2>Policy</h2><p>Current execution boundaries</p></div></div>
-            <div id="policyList" class="detail-grid"></div>
-          </section>
-          <section class="panel">
-            <div class="panel-head"><div><h2>Audit Log</h2><p>Latest security-sensitive actions</p></div></div>
-            <div id="auditList" class="activity-list full"></div>
-          </section>
-        </div>
-      </section>
-    </main>
+    </div>
   </div>
-  <script type="module" src="/app.js"></script>
+
+  <section class="glass panel-meta" id="metaPanel">
+    <h2><span class="icon">📊</span> System</h2>
+    <pre id="runtimeMeta"></pre>
+  </section>
+</div>
+
+<script type="module" src="/app.js"></script>
+<script type="module" src="/engine3d.js"></script>
 </body>
 </html>
