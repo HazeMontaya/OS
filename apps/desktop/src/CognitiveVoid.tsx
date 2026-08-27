@@ -30,65 +30,44 @@ function hashUnit(value: string) {
 
 function semanticRadius(kind: string) {
   switch (kind) {
-    case "self_model":
-      return 0;
-    case "actor":
-      return 3.2;
+    case "self_model": return 0;
+    case "actor": return 3.2;
     case "goal":
-    case "project":
-      return 4.5;
-    case "episodic_memory":
-      return 5.8;
+    case "project": return 4.5;
+    case "episodic_memory": return 5.8;
     case "semantic_memory":
-    case "stable_memory":
-      return 7.2;
+    case "stable_memory": return 7.2;
     case "agent":
-    case "model":
-      return 8.2;
-    case "tool":
-      return 9.4;
-    default:
-      return 7.8;
+    case "model": return 8.2;
+    case "tool": return 9.4;
+    default: return 7.8;
   }
 }
 
 function nodePosition(node: CognitiveNode, index: number) {
   if (node.kind === "self_model") return Vector3.Zero();
-
-  const seed = hashUnit(node.id);
-  const angle = index * GOLDEN_ANGLE + seed * Math.PI * 2;
+  const angle = index * GOLDEN_ANGLE + hashUnit(node.id) * Math.PI * 2;
   const radius = semanticRadius(node.kind) + hashUnit(`${node.id}:radius`) * 1.7;
   const verticalSpread = node.kind === "actor" ? 1.4 : Math.min(7, radius * 0.72);
-  const vertical = (hashUnit(`${node.id}:vertical`) - 0.5) * verticalSpread;
-
   return new Vector3(
     Math.cos(angle) * radius,
-    vertical,
+    (hashUnit(`${node.id}:vertical`) - 0.5) * verticalSpread,
     Math.sin(angle) * radius,
   );
 }
 
 function nodeEnergy(node: CognitiveNode) {
   switch (node.kind) {
-    case "self_model":
-      return new Color3(0.82, 0.96, 1);
-    case "actor":
-      return new Color3(0.38, 0.84, 1);
-    case "episodic_memory":
-      return new Color3(0.22, 0.58, 0.98);
+    case "self_model": return new Color3(0.82, 0.96, 1);
+    case "actor": return new Color3(0.38, 0.84, 1);
+    case "episodic_memory": return new Color3(0.22, 0.58, 0.98);
     case "semantic_memory":
-    case "stable_memory":
-      return new Color3(0.24, 0.78, 0.88);
-    case "model":
-      return new Color3(0.62, 0.42, 1);
-    case "agent":
-      return new Color3(0.34, 0.86, 0.78);
-    case "tool":
-      return new Color3(0.96, 0.7, 0.28);
-    case "goal":
-      return new Color3(0.96, 0.48, 0.62);
-    default:
-      return new Color3(0.4, 0.66, 0.96);
+    case "stable_memory": return new Color3(0.24, 0.78, 0.88);
+    case "model": return new Color3(0.62, 0.42, 1);
+    case "agent": return new Color3(0.34, 0.86, 0.78);
+    case "tool": return new Color3(0.96, 0.7, 0.28);
+    case "goal": return new Color3(0.96, 0.48, 0.62);
+    default: return new Color3(0.4, 0.66, 0.96);
   }
 }
 
@@ -105,23 +84,113 @@ async function createRenderEngine(canvas: HTMLCanvasElement): Promise<AbstractEn
       console.warn("WebGPU initialization failed; using WebGL fallback.", error);
     }
   }
+  return new Engine(canvas, true, { preserveDrawingBuffer: false, stencil: true }, true);
+}
 
-  return new Engine(
-    canvas,
-    true,
-    { preserveDrawingBuffer: false, stencil: true },
-    true,
-  );
+function renderGraph(scene: Scene, graph: GraphSnapshot) {
+  scene.meshes
+    .filter((mesh) => mesh.metadata?.cognitive === true)
+    .forEach((mesh) => mesh.dispose());
+  [...scene.materials]
+    .filter((material) => material.name.startsWith("cog-material:"))
+    .forEach((material) => material.dispose());
+
+  if (graph.nodes.length === 0) {
+    const dormant = MeshBuilder.CreateSphere(
+      "cog-dormant-core",
+      { diameter: 0.72, segments: 24 },
+      scene,
+    );
+    dormant.metadata = { cognitive: true, dormant: true };
+    const material = new StandardMaterial("cog-material:dormant", scene);
+    material.emissiveColor = new Color3(0.18, 0.34, 0.58);
+    material.diffuseColor = material.emissiveColor.scale(0.12);
+    material.alpha = 0.48;
+    dormant.material = material;
+    return;
+  }
+
+  const orderedNodes = [...graph.nodes].sort((left, right) => {
+    if (left.kind === "self_model" && right.kind !== "self_model") return -1;
+    if (right.kind === "self_model" && left.kind !== "self_model") return 1;
+    return left.id.localeCompare(right.id);
+  });
+  const positions = new Map<string, Vector3>();
+
+  orderedNodes.forEach((node, index) => {
+    const position = nodePosition(node, index);
+    positions.set(node.id, position);
+    const importance = Math.max(0, Math.min(1, node.importance));
+    const confidence = Math.max(0, Math.min(1, node.confidence));
+    const sphere = MeshBuilder.CreateSphere(
+      `cog-node:${node.id}`,
+      {
+        diameter: node.kind === "self_model" ? 1.2 : 0.3 + importance * 0.56,
+        segments: node.kind === "self_model" ? 36 : 18,
+      },
+      scene,
+    );
+    sphere.position.copyFrom(position);
+    sphere.isPickable = true;
+    sphere.metadata = {
+      cognitive: true,
+      cognitiveNode: true,
+      id: node.id,
+      kind: node.kind,
+      label: node.label,
+      importance,
+      confidence,
+    };
+
+    const energy = nodeEnergy(node);
+    const material = new StandardMaterial(`cog-material:${node.id}`, scene);
+    material.emissiveColor = energy.scale(0.58 + confidence * 0.42);
+    material.diffuseColor = energy.scale(0.11);
+    material.alpha = 0.38 + confidence * 0.62;
+    sphere.material = material;
+  });
+
+  graph.edges.forEach((edge) => {
+    const from = positions.get(edge.from);
+    const to = positions.get(edge.to);
+    if (!from || !to) return;
+
+    const historical = edge.valid_until_ms !== null;
+    const weight = Math.max(0, Math.min(1, edge.weight));
+    const line = MeshBuilder.CreateLines(
+      `cog-edge:${edge.id}`,
+      { points: [from, to], updatable: false },
+      scene,
+    );
+    line.metadata = {
+      cognitive: true,
+      cognitiveEdge: true,
+      id: edge.id,
+      relation: edge.relation,
+      historical,
+    };
+    line.color = historical
+      ? new Color3(0.28, 0.34, 0.44)
+      : new Color3(0.16, 0.46, 0.84);
+    line.alpha = historical ? 0.08 : 0.18 + weight * 0.52;
+    line.isPickable = true;
+  });
 }
 
 export default function CognitiveVoid({ graph, activity }: CognitiveVoidProps) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const sceneRef = useRef<Scene | null>(null);
   const activityRef = useRef(activity);
+  const graphRef = useRef(graph);
 
   useEffect(() => {
     activityRef.current = activity;
   }, [activity]);
+
+  useEffect(() => {
+    graphRef.current = graph;
+    if (sceneRef.current) renderGraph(sceneRef.current, graph);
+  }, [graph]);
 
   useEffect(() => {
     const canvas = canvasRef.current;
@@ -130,7 +199,6 @@ export default function CognitiveVoid({ graph, activity }: CognitiveVoidProps) {
     let disposed = false;
     let engine: AbstractEngine | null = null;
     let scene: Scene | null = null;
-
     const resize = () => engine?.resize();
 
     void (async () => {
@@ -164,9 +232,10 @@ export default function CognitiveVoid({ graph, activity }: CognitiveVoidProps) {
 
       const light = new HemisphericLight("ambient", new Vector3(0, 1, 0), scene);
       light.intensity = 0.5;
-
       const glow = new GlowLayer("cognitive-glow", scene);
       glow.intensity = 0.84;
+
+      renderGraph(scene, graphRef.current);
 
       scene.onBeforeRenderObservable.add(() => {
         const time = performance.now() * 0.001;
@@ -188,99 +257,6 @@ export default function CognitiveVoid({ graph, activity }: CognitiveVoidProps) {
       engine?.dispose();
     };
   }, []);
-
-  useEffect(() => {
-    const scene = sceneRef.current;
-    if (!scene) return;
-
-    scene.meshes
-      .filter((mesh) => mesh.metadata?.cognitive === true)
-      .forEach((mesh) => mesh.dispose());
-    [...scene.materials]
-      .filter((material) => material.name.startsWith("cog-material:"))
-      .forEach((material) => material.dispose());
-
-    if (graph.nodes.length === 0) {
-      const dormant = MeshBuilder.CreateSphere(
-        "cog-dormant-core",
-        { diameter: 0.72, segments: 24 },
-        scene,
-      );
-      dormant.metadata = { cognitive: true, dormant: true };
-      const material = new StandardMaterial("cog-material:dormant", scene);
-      material.emissiveColor = new Color3(0.18, 0.34, 0.58);
-      material.diffuseColor = material.emissiveColor.scale(0.12);
-      material.alpha = 0.48;
-      dormant.material = material;
-      return;
-    }
-
-    const orderedNodes = [...graph.nodes].sort((left, right) => {
-      if (left.kind === "self_model" && right.kind !== "self_model") return -1;
-      if (right.kind === "self_model" && left.kind !== "self_model") return 1;
-      return left.id.localeCompare(right.id);
-    });
-
-    const positions = new Map<string, Vector3>();
-
-    orderedNodes.forEach((node, index) => {
-      const position = nodePosition(node, index);
-      positions.set(node.id, position);
-
-      const importance = Math.max(0, Math.min(1, node.importance));
-      const confidence = Math.max(0, Math.min(1, node.confidence));
-      const diameter = node.kind === "self_model" ? 1.2 : 0.3 + importance * 0.56;
-      const sphere = MeshBuilder.CreateSphere(
-        `cog-node:${node.id}`,
-        { diameter, segments: node.kind === "self_model" ? 36 : 18 },
-        scene,
-      );
-      sphere.position.copyFrom(position);
-      sphere.isPickable = true;
-      sphere.metadata = {
-        cognitive: true,
-        cognitiveNode: true,
-        id: node.id,
-        kind: node.kind,
-        label: node.label,
-        importance,
-        confidence,
-      };
-
-      const energy = nodeEnergy(node);
-      const material = new StandardMaterial(`cog-material:${node.id}`, scene);
-      material.emissiveColor = energy.scale(0.58 + confidence * 0.42);
-      material.diffuseColor = energy.scale(0.11);
-      material.alpha = 0.38 + confidence * 0.62;
-      sphere.material = material;
-    });
-
-    graph.edges.forEach((edge) => {
-      const from = positions.get(edge.from);
-      const to = positions.get(edge.to);
-      if (!from || !to) return;
-
-      const historical = edge.valid_until_ms !== null;
-      const weight = Math.max(0, Math.min(1, edge.weight));
-      const line = MeshBuilder.CreateLines(
-        `cog-edge:${edge.id}`,
-        { points: [from, to], updatable: false },
-        scene,
-      );
-      line.metadata = {
-        cognitive: true,
-        cognitiveEdge: true,
-        id: edge.id,
-        relation: edge.relation,
-        historical,
-      };
-      line.color = historical
-        ? new Color3(0.28, 0.34, 0.44)
-        : new Color3(0.16, 0.46, 0.84);
-      line.alpha = historical ? 0.08 : 0.18 + weight * 0.52;
-      line.isPickable = true;
-    });
-  }, [graph]);
 
   return <canvas className="void-canvas" ref={canvasRef} />;
 }
