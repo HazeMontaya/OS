@@ -73,11 +73,27 @@ jobs:
         run: pnpm --filter @os/desktop build
 
   windows-desktop:
-    name: Windows desktop compile
+    name: Windows launchable desktop
     runs-on: windows-latest
     steps:
       - name: Checkout
         uses: actions/checkout@v4
+
+      - name: Validate Windows bootstrap scripts
+        shell: powershell
+        run: |
+          $failed = $false
+          Get-ChildItem scripts/windows/*.ps1 | ForEach-Object {
+            $tokens = $null
+            $errors = $null
+            [System.Management.Automation.Language.Parser]::ParseFile($_.FullName, [ref]$tokens, [ref]$errors) | Out-Null
+            if ($errors.Count -gt 0) {
+              $failed = $true
+              Write-Host "Syntax errors in $($_.FullName)" -ForegroundColor Red
+              $errors | ForEach-Object { Write-Host $_.Message -ForegroundColor Red }
+            }
+          }
+          if ($failed) { exit 1 }
 
       - name: Install protobuf compiler
         shell: powershell
@@ -110,5 +126,21 @@ jobs:
       - name: Production web build
         run: pnpm --filter @os/desktop build
 
-      - name: Compile Tauri desktop
-        run: cargo check -p os-desktop
+      - name: Build launchable Tauri release executable
+        run: pnpm build:app
+
+      - name: Verify release executable
+        shell: powershell
+        run: |
+          if (-not (Test-Path "target/release/os-desktop.exe")) {
+            throw "target/release/os-desktop.exe was not produced"
+          }
+          Get-Item "target/release/os-desktop.exe" | Format-List Name,Length,LastWriteTime
+
+      - name: Upload Windows executable
+        uses: actions/upload-artifact@v4
+        with:
+          name: os-windows-${{ github.sha }}
+          path: target/release/os-desktop.exe
+          if-no-files-found: error
+          retention-days: 14
