@@ -72,7 +72,10 @@ pub enum ToolRegistryError {
     #[error("tool not found: {0}")]
     NotFound(String),
     #[error("missing capabilities for tool {tool_id}: {missing:?}")]
-    MissingCapabilities { tool_id: String, missing: Vec<String> },
+    MissingCapabilities {
+        tool_id: String,
+        missing: Vec<String>,
+    },
 }
 
 #[derive(Debug, Default)]

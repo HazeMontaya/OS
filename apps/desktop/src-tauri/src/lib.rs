@@ -2,7 +2,10 @@ use std::{env, fmt::Write, sync::Mutex};
 
 use os_contracts::{AskResult, ContextPack, GraphSnapshot, SystemSnapshot};
 use os_kernel::{Kernel, SemanticMemoryProjection};
-use os_model_gateway::{ApiKeys, ChatMessage, CloudClient, CloudConfig, LlamaCppClient, LlamaCppConfig, ModelCompletion, ProviderStatus};
+use os_model_gateway::{
+    ApiKeys, ChatMessage, CloudClient, CloudConfig, LlamaCppClient, LlamaCppConfig,
+    ModelCompletion, ProviderStatus,
+};
 use os_privacy::PrivacyFilter;
 use os_semantic_index::{SemanticDocument, SemanticIndex};
 use serde::Serialize;
@@ -362,7 +365,11 @@ async fn get_api_keys(state: tauri::State<'_, AppState>) -> Result<ApiKeys, Stri
 }
 
 #[tauri::command]
-async fn set_api_key(provider: String, key: String, state: tauri::State<'_, AppState>) -> Result<(), String> {
+async fn set_api_key(
+    provider: String,
+    key: String,
+    state: tauri::State<'_, AppState>,
+) -> Result<(), String> {
     let mut keys = state.api_keys.lock().await;
     match provider.as_str() {
         "openai" => keys.openai = key,
@@ -384,7 +391,12 @@ async fn check_providers(state: tauri::State<'_, AppState>) -> Result<Vec<Provid
             .map_err(|e| e.to_string())?;
         statuses.push(client.check_health().await);
     } else {
-        statuses.push(ProviderStatus { provider: "OpenAI".into(), available: false, api_key_set: false, endpoint: "https://api.openai.com".into() });
+        statuses.push(ProviderStatus {
+            provider: "OpenAI".into(),
+            available: false,
+            api_key_set: false,
+            endpoint: "https://api.openai.com".into(),
+        });
     }
 
     if !keys.anthropic.is_empty() {
@@ -392,21 +404,34 @@ async fn check_providers(state: tauri::State<'_, AppState>) -> Result<Vec<Provid
             .map_err(|e| e.to_string())?;
         statuses.push(client.check_health().await);
     } else {
-        statuses.push(ProviderStatus { provider: "Anthropic".into(), available: false, api_key_set: false, endpoint: "https://api.anthropic.com".into() });
+        statuses.push(ProviderStatus {
+            provider: "Anthropic".into(),
+            available: false,
+            api_key_set: false,
+            endpoint: "https://api.anthropic.com".into(),
+        });
     }
 
     {
-        let client = CloudClient::new(CloudConfig::ollama("llama3.2:3b"))
-            .map_err(|e| e.to_string())?;
+        let client =
+            CloudClient::new(CloudConfig::ollama("llama3.2:3b")).map_err(|e| e.to_string())?;
         statuses.push(client.check_health().await);
     }
 
     if !keys.openrouter.is_empty() {
-        let client = CloudClient::new(CloudConfig::openrouter("openai/gpt-4o-mini", &keys.openrouter))
-            .map_err(|e| e.to_string())?;
+        let client = CloudClient::new(CloudConfig::openrouter(
+            "openai/gpt-4o-mini",
+            &keys.openrouter,
+        ))
+        .map_err(|e| e.to_string())?;
         statuses.push(client.check_health().await);
     } else {
-        statuses.push(ProviderStatus { provider: "OpenRouter".into(), available: false, api_key_set: false, endpoint: "https://openrouter.ai".into() });
+        statuses.push(ProviderStatus {
+            provider: "OpenRouter".into(),
+            available: false,
+            api_key_set: false,
+            endpoint: "https://openrouter.ai".into(),
+        });
     }
 
     Ok(statuses)
@@ -429,7 +454,10 @@ async fn cloud_chat(
     };
     let client = CloudClient::new(config).map_err(|e| e.to_string())?;
     let messages = vec![ChatMessage::user(content)];
-    client.chat(&messages, 2048, 0.7).await.map_err(|e| e.to_string())
+    client
+        .chat(&messages, 2048, 0.7)
+        .await
+        .map_err(|e| e.to_string())
 }
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]

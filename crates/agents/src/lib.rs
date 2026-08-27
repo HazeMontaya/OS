@@ -109,7 +109,10 @@ impl AgentRegistry {
         record.revision = record.revision.saturating_add(1);
         record.active_trace_id = if matches!(
             next,
-            AgentState::Completed | AgentState::Failed | AgentState::Cancelled | AgentState::Dormant
+            AgentState::Completed
+                | AgentState::Failed
+                | AgentState::Cancelled
+                | AgentState::Dormant
         ) {
             None
         } else {

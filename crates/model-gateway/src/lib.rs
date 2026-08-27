@@ -444,8 +444,12 @@ impl ApiKeys {
                     let value = value.trim().trim_matches('"').trim_matches('\'');
                     match key {
                         "OPENAI_API_KEY" if !value.is_empty() => keys.openai = value.to_string(),
-                        "ANTHROPIC_API_KEY" if !value.is_empty() => keys.anthropic = value.to_string(),
-                        "OPENROUTER_API_KEY" if !value.is_empty() => keys.openrouter = value.to_string(),
+                        "ANTHROPIC_API_KEY" if !value.is_empty() => {
+                            keys.anthropic = value.to_string()
+                        }
+                        "OPENROUTER_API_KEY" if !value.is_empty() => {
+                            keys.openrouter = value.to_string()
+                        }
                         "OLLAMA_API_KEY" if !value.is_empty() => keys.ollama = value.to_string(),
                         _ => {}
                     }
@@ -566,8 +570,13 @@ impl CloudClient {
         temperature: f32,
     ) -> Result<ModelCompletion, ModelGatewayError> {
         match self.config.provider {
-            CloudProvider::Anthropic => self.chat_anthropic(messages, max_tokens, temperature).await,
-            _ => self.chat_openai_compatible(messages, max_tokens, temperature).await,
+            CloudProvider::Anthropic => {
+                self.chat_anthropic(messages, max_tokens, temperature).await
+            }
+            _ => {
+                self.chat_openai_compatible(messages, max_tokens, temperature)
+                    .await
+            }
         }
     }
 
@@ -591,8 +600,12 @@ impl CloudClient {
         if !self.config.api_key.is_empty() {
             request = request.bearer_auth(&self.config.api_key);
         }
-        let response = request.send().await?.error_for_status()?
-            .json::<ChatCompletionResponse>().await?;
+        let response = request
+            .send()
+            .await?
+            .error_for_status()?
+            .json::<ChatCompletionResponse>()
+            .await?;
         let text = response
             .choices
             .first()
@@ -613,10 +626,13 @@ impl CloudClient {
         max_tokens: u32,
         temperature: f32,
     ) -> Result<ModelCompletion, ModelGatewayError> {
-        let (system, user_messages): (Vec<_>, Vec<_>) = messages
+        let (system, user_messages): (Vec<_>, Vec<_>) =
+            messages.iter().partition(|m| m.role == "system");
+        let system_text = system
             .iter()
-            .partition(|m| m.role == "system");
-        let system_text = system.iter().map(|m| m.content.as_str()).collect::<Vec<_>>().join("\n");
+            .map(|m| m.content.as_str())
+            .collect::<Vec<_>>()
+            .join("\n");
         let anthropic_messages: Vec<serde_json::Value> = user_messages
             .iter()
             .map(|m| serde_json::json!({"role": m.role, "content": m.content}))
@@ -639,8 +655,12 @@ impl CloudClient {
         if !self.config.api_key.is_empty() {
             request = request.header("x-api-key", &self.config.api_key);
         }
-        let response = request.send().await?.error_for_status()?
-            .json::<AnthropicResponse>().await?;
+        let response = request
+            .send()
+            .await?
+            .error_for_status()?
+            .json::<AnthropicResponse>()
+            .await?;
         let text = response
             .content
             .iter()
@@ -660,20 +680,20 @@ impl CloudClient {
 
     pub async fn check_health(&self) -> ProviderStatus {
         let available = match self.config.provider {
-            CloudProvider::Ollama => {
-                self.client
-                    .get("http://127.0.0.1:11434/api/tags")
-                    .send()
-                    .await
-                    .map(|r| r.status().is_success())
-                    .unwrap_or(false)
-            }
+            CloudProvider::Ollama => self
+                .client
+                .get("http://127.0.0.1:11434/api/tags")
+                .send()
+                .await
+                .map(|r| r.status().is_success())
+                .unwrap_or(false),
             CloudProvider::Anthropic => {
                 let mut request = self.client.get("https://api.anthropic.com/v1/messages");
                 if !self.config.api_key.is_empty() {
                     request = request.header("x-api-key", &self.config.api_key);
                 }
-                request.header("anthropic-version", "2023-06-01")
+                request
+                    .header("anthropic-version", "2023-06-01")
                     .send()
                     .await
                     .map(|r| r.status().is_success() || r.status().as_u16() == 400)
@@ -685,7 +705,8 @@ impl CloudClient {
                 if !self.config.api_key.is_empty() {
                     request = request.bearer_auth(&self.config.api_key);
                 }
-                request.send()
+                request
+                    .send()
                     .await
                     .map(|r| r.status().is_success() || r.status().as_u16() == 401)
                     .unwrap_or(false)
@@ -703,8 +724,8 @@ impl CloudClient {
 #[cfg(test)]
 mod tests {
     use super::{
-        EmbeddingData, EmbeddingResponse, LlamaCppClient, ModelDescriptor, ModelKind,
-        ModelRegistry, extract_text, ApiKeys, CloudProvider,
+        ApiKeys, CloudProvider, EmbeddingData, EmbeddingResponse, LlamaCppClient, ModelDescriptor,
+        ModelKind, ModelRegistry, extract_text,
     };
     use serde_json::json;
 
