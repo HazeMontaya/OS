@@ -1,4 +1,4 @@
-﻿# MEMORY
+# MEMORY
 
 ## Stable Memory
 Bestätigte, langfristig relevante Informationen.

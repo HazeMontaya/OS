@@ -12,3 +12,11 @@ secrets.json
 *.p12
 *.pfx
 *.key
+Data/Obsidian/Network/Cookies
+Data/Obsidian/Network/Cookies-journal
+Data/Obsidian/Network/Trust Tokens
+Data/Obsidian/Network/Trust Tokens-journal
+Data/Obsidian/Local State
+Data/Obsidian/Local Storage/
+Data/Obsidian/Session Storage/
+Data/Obsidian/IndexedDB/

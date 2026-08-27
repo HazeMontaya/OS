@@ -1,4 +1,4 @@
-﻿# AI Brain — System
+# AI Brain — System
 
 ## Source of Truth
 Dieser Vault unter `S:\OS\AI-Brain` ist die kontrollierbare, portable Wissensbasis.

@@ -1,4 +1,4 @@
-﻿# AGENTS.md
+# AGENTS.md
 
 Lies zuerst `SYSTEM.md`, `VAULT-INDEX.md` und bei relevanten Aufgaben `MEMORY.md`.
 

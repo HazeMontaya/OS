@@ -1,0 +1,7 @@
+{"ts":"2026-08-26T22:55:18.199Z","type":"interaction","prompt":"Welche Version bist du? Was sind deine Fähigkeiten? Antworte kurz.","provider":"mistral","model":"mistral-small-latest","toolCalls":[]}
+{"ts":"2026-08-26T23:23:47.912Z","type":"interaction","prompt":"hallo","provider":"openrouter","model":"google/gemini-2.5-flash","toolCalls":[]}
+{"ts":"2026-08-26T23:24:01.737Z","type":"interaction","prompt":"wie ist das wetter in deutschland","provider":"openrouter","model":"google/gemini-2.5-flash","toolCalls":[]}
+{"ts":"2026-08-26T23:24:38.789Z","type":"interaction","prompt":"hallo","provider":"openrouter","model":"google/gemini-2.5-flash","toolCalls":[]}
+{"ts":"2026-08-26T23:24:51.728Z","type":"interaction","prompt":"wetter in DE","provider":"openrouter","model":"google/gemini-2.5-flash","toolCalls":[]}
+{"ts":"2026-08-26T23:25:02.992Z","type":"interaction","prompt":"OS verbessern","provider":"openrouter","model":"google/gemini-2.5-flash","toolCalls":[]}
+{"ts":"2026-08-26T23:25:34.685Z","type":"interaction","prompt":"was kannst du denn","provider":"openrouter","model":"google/gemini-2.5-flash","toolCalls":[]}

@@ -1,2 +1,4 @@
 /OS.exe filter=lfs diff=lfs merge=lfs -text
 /Obsidian/Obsidian.exe filter=lfs diff=lfs merge=lfs -text
+OS.exe filter=lfs diff=lfs merge=lfs -text
+Obsidian/Obsidian.exe filter=lfs diff=lfs merge=lfs -text
