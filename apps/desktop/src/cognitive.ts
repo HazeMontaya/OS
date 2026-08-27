@@ -1,3 +1,34 @@
+export type MemoryKind =
+  | "working"
+  | "episodic"
+  | "semantic"
+  | "procedural"
+  | "stable"
+  | "preference"
+  | "project"
+  | "self_model"
+  | "world_model";
+
+export type ContextItem = {
+  id: string;
+  text: string;
+  kind: MemoryKind;
+  score: number;
+  confidence: number;
+  provenance: string[];
+};
+
+export type ContextPack = {
+  query: string;
+  items: ContextItem[];
+};
+
+export type AskResult = {
+  text: string;
+  model: string;
+  context: ContextPack;
+};
+
 export type CognitiveNode = {
   id: string;
   kind: string;
