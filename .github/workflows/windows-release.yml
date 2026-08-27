@@ -1,0 +1,79 @@
+name: Windows Release Package
+
+on:
+  workflow_dispatch:
+  push:
+    tags:
+      - "v*"
+
+permissions:
+  contents: read
+
+jobs:
+  package-windows:
+    name: Build Windows executable and NSIS installer
+    runs-on: windows-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install protobuf compiler
+        shell: powershell
+        run: |
+          choco install protoc --no-progress -y
+          protoc --version
+
+      - name: Install stable Rust
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Cache Rust build
+        uses: Swatinem/rust-cache@v2
+
+      - name: Install pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 10
+
+      - name: Install Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 24
+
+      - name: Install workspace dependencies
+        run: pnpm install --no-frozen-lockfile
+
+      - name: Validate workspace
+        run: |
+          pnpm typecheck
+          cargo check --workspace
+
+      - name: Build release executable
+        run: pnpm build:app
+
+      - name: Bundle NSIS installer
+        run: pnpm bundle:windows
+
+      - name: Verify release outputs
+        shell: powershell
+        run: |
+          if (-not (Test-Path "target/release/os-desktop.exe")) {
+            throw "Release executable is missing"
+          }
+          $installers = @(Get-ChildItem "target/release/bundle/nsis" -Filter "*.exe" -File -ErrorAction SilentlyContinue)
+          if ($installers.Count -eq 0) {
+            throw "NSIS installer is missing"
+          }
+          Write-Host "Executable:"
+          Get-Item "target/release/os-desktop.exe" | Format-List Name,Length,LastWriteTime
+          Write-Host "Installer(s):"
+          $installers | Format-Table Name,Length,LastWriteTime
+
+      - name: Upload Windows release package
+        uses: actions/upload-artifact@v4
+        with:
+          name: OS-Windows-${{ github.ref_name }}-${{ github.sha }}
+          path: |
+            target/release/os-desktop.exe
+            target/release/bundle/nsis/*.exe
+          if-no-files-found: error
+          retention-days: 30
