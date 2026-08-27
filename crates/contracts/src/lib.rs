@@ -55,6 +55,22 @@ pub enum MemoryKind {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ContextItem {
+    pub id: String,
+    pub text: String,
+    pub kind: MemoryKind,
+    pub score: f32,
+    pub confidence: f32,
+    pub provenance: Vec<String>,
+}
+
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
+pub struct ContextPack {
+    pub query: String,
+    pub items: Vec<ContextItem>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct EntityRecord {
     pub entity_id: String,
     pub kind: String,
