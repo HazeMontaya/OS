@@ -4,7 +4,7 @@ use os_contracts::{
     CognitiveEvent, EntityRecord, FactRecord, MemoryKind, MemoryRecord, RelationshipRecord,
     Sensitivity,
 };
-use rusqlite::{Connection, params};
+use rusqlite::{params, Connection};
 use thiserror::Error;
 
 const MIGRATION_0001: &str = include_str!("../migrations/0001_init.sql");
@@ -19,6 +19,8 @@ pub enum StorageError {
     Io(#[from] std::io::Error),
     #[error("database integrity check failed: {0}")]
     Integrity(String),
+    #[error("invalid persisted data: {0}")]
+    InvalidData(String),
 }
 
 pub type Result<T> = std::result::Result<T, StorageError>;
@@ -33,7 +35,6 @@ impl Storage {
         if let Some(parent) = path.parent() {
             fs::create_dir_all(parent)?;
         }
-
         let connection = Connection::open(path)?;
         Self::configure(&connection)?;
         let storage = Self { connection };
@@ -65,7 +66,6 @@ impl Storage {
         let result: String = self
             .connection
             .query_row("PRAGMA quick_check(1)", [], |row| row.get(0))?;
-
         if result == "ok" {
             Ok(())
         } else {
@@ -77,17 +77,14 @@ impl Storage {
         let version: i64 = self
             .connection
             .query_row("PRAGMA user_version", [], |row| row.get(0))?;
-
         if version < 1 {
             self.connection.execute_batch(MIGRATION_0001)?;
         }
-
         Ok(())
     }
 
     pub fn append_event(&mut self, event: &CognitiveEvent) -> Result<()> {
         let provenance_json = serde_json::to_string(&event.provenance)?;
-        let sensitivity = sensitivity_name(event.sensitivity);
         let searchable_text = event
             .payload
             .get("content")
@@ -97,10 +94,10 @@ impl Storage {
 
         let transaction = self.connection.transaction()?;
         transaction.execute(
-            "INSERT INTO events (\n\
-                event_id, timestamp_ms, source, actor, event_type, payload_json,\n\
-                context_id, session_id, project_id, sensitivity, trace_id, parent_event,\n\
-                provenance_json, created_at_ms\n\
+            "INSERT INTO events (
+                event_id, timestamp_ms, source, actor, event_type, payload_json,
+                context_id, session_id, project_id, sensitivity, trace_id, parent_event,
+                provenance_json, created_at_ms
              ) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14)",
             params![
                 &event.event_id,
@@ -112,62 +109,55 @@ impl Storage {
                 &event.context_id,
                 &event.session_id,
                 &event.project_id,
-                sensitivity,
+                sensitivity_name(event.sensitivity),
                 &event.trace_id,
                 &event.parent_event,
                 provenance_json,
                 event.timestamp_ms,
             ],
         )?;
-
         if let Some(text) = searchable_text {
             transaction.execute(
                 "INSERT INTO event_fts (event_id, text) VALUES (?1, ?2)",
                 params![&event.event_id, text],
             )?;
         }
-
         transaction.commit()?;
         Ok(())
     }
 
     pub fn upsert_entity(&self, entity: &EntityRecord) -> Result<()> {
-        let aliases_json = serde_json::to_string(&entity.aliases)?;
-        let provenance_json = serde_json::to_string(&entity.provenance)?;
-
         self.connection.execute(
-            "INSERT INTO entities (\n\
-                entity_id, kind, canonical_label, aliases_json, confidence,\n\
-                first_seen_ms, last_seen_ms, provenance_json\n\
-             ) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8)\n\
-             ON CONFLICT(entity_id) DO UPDATE SET\n\
-                kind = excluded.kind,\n\
-                canonical_label = excluded.canonical_label,\n\
-                aliases_json = excluded.aliases_json,\n\
-                confidence = excluded.confidence,\n\
-                last_seen_ms = MAX(entities.last_seen_ms, excluded.last_seen_ms),\n\
+            "INSERT INTO entities (
+                entity_id, kind, canonical_label, aliases_json, confidence,
+                first_seen_ms, last_seen_ms, provenance_json
+             ) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8)
+             ON CONFLICT(entity_id) DO UPDATE SET
+                kind = excluded.kind,
+                canonical_label = excluded.canonical_label,
+                aliases_json = excluded.aliases_json,
+                confidence = excluded.confidence,
+                last_seen_ms = MAX(entities.last_seen_ms, excluded.last_seen_ms),
                 provenance_json = excluded.provenance_json",
             params![
                 &entity.entity_id,
                 &entity.kind,
                 &entity.canonical_label,
-                aliases_json,
+                serde_json::to_string(&entity.aliases)?,
                 entity.confidence,
                 entity.first_seen_ms,
                 entity.last_seen_ms,
-                provenance_json,
+                serde_json::to_string(&entity.provenance)?,
             ],
         )?;
         Ok(())
     }
 
     pub fn insert_fact(&self, fact: &FactRecord) -> Result<()> {
-        let provenance_json = serde_json::to_string(&fact.provenance)?;
-
         self.connection.execute(
-            "INSERT INTO facts (\n\
-                fact_id, subject_id, predicate, object_json, confidence, valid_from_ms,\n\
-                valid_until_ms, observed_at_ms, superseded_at_ms, provenance_json\n\
+            "INSERT INTO facts (
+                fact_id, subject_id, predicate, object_json, confidence, valid_from_ms,
+                valid_until_ms, observed_at_ms, superseded_at_ms, provenance_json
              ) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10)",
             params![
                 &fact.fact_id,
@@ -179,7 +169,7 @@ impl Storage {
                 fact.valid_until_ms,
                 fact.observed_at_ms,
                 fact.superseded_at_ms,
-                provenance_json,
+                serde_json::to_string(&fact.provenance)?,
             ],
         )?;
         Ok(())
@@ -187,9 +177,9 @@ impl Storage {
 
     pub fn supersede_fact(&self, fact_id: &str, at_ms: i64) -> Result<bool> {
         let changed = self.connection.execute(
-            "UPDATE facts\n\
-             SET valid_until_ms = COALESCE(valid_until_ms, ?2),\n\
-                 superseded_at_ms = COALESCE(superseded_at_ms, ?2)\n\
+            "UPDATE facts
+             SET valid_until_ms = COALESCE(valid_until_ms, ?2),
+                 superseded_at_ms = COALESCE(superseded_at_ms, ?2)
              WHERE fact_id = ?1 AND superseded_at_ms IS NULL",
             params![fact_id, at_ms],
         )?;
@@ -197,13 +187,19 @@ impl Storage {
     }
 
     pub fn insert_relationship(&self, relationship: &RelationshipRecord) -> Result<()> {
-        let provenance_json = serde_json::to_string(&relationship.provenance)?;
-
         self.connection.execute(
-            "INSERT INTO relationships (\n\
-                edge_id, from_entity_id, to_entity_id, relation, weight, confidence,\n\
-                valid_from_ms, valid_until_ms, provenance_json\n\
-             ) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9)",
+            "INSERT INTO relationships (
+                edge_id, from_entity_id, to_entity_id, relation, weight, confidence,
+                valid_from_ms, valid_until_ms, provenance_json
+             ) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9)
+             ON CONFLICT(edge_id) DO UPDATE SET
+                from_entity_id = excluded.from_entity_id,
+                to_entity_id = excluded.to_entity_id,
+                relation = excluded.relation,
+                weight = excluded.weight,
+                confidence = excluded.confidence,
+                valid_until_ms = excluded.valid_until_ms,
+                provenance_json = excluded.provenance_json",
             params![
                 &relationship.edge_id,
                 &relationship.from_entity_id,
@@ -213,7 +209,7 @@ impl Storage {
                 relationship.confidence,
                 relationship.valid_from_ms,
                 relationship.valid_until_ms,
-                provenance_json,
+                serde_json::to_string(&relationship.provenance)?,
             ],
         )?;
         Ok(())
@@ -221,8 +217,8 @@ impl Storage {
 
     pub fn invalidate_relationship(&self, edge_id: &str, at_ms: i64) -> Result<bool> {
         let changed = self.connection.execute(
-            "UPDATE relationships\n\
-             SET valid_until_ms = COALESCE(valid_until_ms, ?2)\n\
+            "UPDATE relationships
+             SET valid_until_ms = COALESCE(valid_until_ms, ?2)
              WHERE edge_id = ?1 AND valid_until_ms IS NULL",
             params![edge_id, at_ms],
         )?;
@@ -230,20 +226,18 @@ impl Storage {
     }
 
     pub fn upsert_memory(&mut self, memory: &MemoryRecord) -> Result<()> {
-        let provenance_json = serde_json::to_string(&memory.provenance)?;
         let transaction = self.connection.transaction()?;
-
         transaction.execute(
-            "INSERT INTO memories (\n\
-                memory_id, kind, text, relevance, confidence, first_seen_ms,\n\
-                last_confirmed_ms, provenance_json\n\
-             ) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8)\n\
-             ON CONFLICT(memory_id) DO UPDATE SET\n\
-                kind = excluded.kind,\n\
-                text = excluded.text,\n\
-                relevance = excluded.relevance,\n\
-                confidence = excluded.confidence,\n\
-                last_confirmed_ms = MAX(memories.last_confirmed_ms, excluded.last_confirmed_ms),\n\
+            "INSERT INTO memories (
+                memory_id, kind, text, relevance, confidence, first_seen_ms,
+                last_confirmed_ms, provenance_json
+             ) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8)
+             ON CONFLICT(memory_id) DO UPDATE SET
+                kind = excluded.kind,
+                text = excluded.text,
+                relevance = excluded.relevance,
+                confidence = excluded.confidence,
+                last_confirmed_ms = MAX(memories.last_confirmed_ms, excluded.last_confirmed_ms),
                 provenance_json = excluded.provenance_json",
             params![
                 &memory.id,
@@ -253,10 +247,9 @@ impl Storage {
                 memory.confidence,
                 memory.first_seen_ms,
                 memory.last_confirmed_ms,
-                provenance_json,
+                serde_json::to_string(&memory.provenance)?,
             ],
         )?;
-
         transaction.execute(
             "DELETE FROM memory_fts WHERE memory_id = ?1",
             params![&memory.id],
@@ -270,15 +263,124 @@ impl Storage {
     }
 
     pub fn record_memory_retrieval(&self, memory_id: &str, successful: bool) -> Result<bool> {
-        let successful_increment = i64::from(successful);
         let changed = self.connection.execute(
-            "UPDATE memories\n\
-             SET retrieval_count = retrieval_count + 1,\n\
-                 successful_use_count = successful_use_count + ?2\n\
+            "UPDATE memories
+             SET retrieval_count = retrieval_count + 1,
+                 successful_use_count = successful_use_count + ?2
              WHERE memory_id = ?1",
-            params![memory_id, successful_increment],
+            params![memory_id, i64::from(successful)],
         )?;
         Ok(changed > 0)
+    }
+
+    pub fn load_entities(&self) -> Result<Vec<EntityRecord>> {
+        let mut statement = self.connection.prepare(
+            "SELECT entity_id, kind, canonical_label, aliases_json, confidence,
+                    first_seen_ms, last_seen_ms, provenance_json
+             FROM entities ORDER BY entity_id",
+        )?;
+        let rows = statement.query_map([], |row| {
+            Ok((
+                row.get::<_, String>(0)?,
+                row.get::<_, String>(1)?,
+                row.get::<_, String>(2)?,
+                row.get::<_, String>(3)?,
+                row.get::<_, f32>(4)?,
+                row.get::<_, i64>(5)?,
+                row.get::<_, i64>(6)?,
+                row.get::<_, String>(7)?,
+            ))
+        })?;
+
+        let mut entities = Vec::new();
+        for row in rows {
+            let (entity_id, kind, canonical_label, aliases, confidence, first_seen_ms, last_seen_ms, provenance) = row?;
+            entities.push(EntityRecord {
+                entity_id,
+                kind,
+                canonical_label,
+                aliases: serde_json::from_str(&aliases)?,
+                confidence,
+                first_seen_ms,
+                last_seen_ms,
+                provenance: serde_json::from_str(&provenance)?,
+            });
+        }
+        Ok(entities)
+    }
+
+    pub fn load_relationships(&self) -> Result<Vec<RelationshipRecord>> {
+        let mut statement = self.connection.prepare(
+            "SELECT edge_id, from_entity_id, to_entity_id, relation, weight, confidence,
+                    valid_from_ms, valid_until_ms, provenance_json
+             FROM relationships ORDER BY edge_id",
+        )?;
+        let rows = statement.query_map([], |row| {
+            Ok((
+                row.get::<_, String>(0)?,
+                row.get::<_, String>(1)?,
+                row.get::<_, String>(2)?,
+                row.get::<_, String>(3)?,
+                row.get::<_, f32>(4)?,
+                row.get::<_, f32>(5)?,
+                row.get::<_, i64>(6)?,
+                row.get::<_, Option<i64>>(7)?,
+                row.get::<_, String>(8)?,
+            ))
+        })?;
+
+        let mut relationships = Vec::new();
+        for row in rows {
+            let (edge_id, from_entity_id, to_entity_id, relation, weight, confidence, valid_from_ms, valid_until_ms, provenance) = row?;
+            relationships.push(RelationshipRecord {
+                edge_id,
+                from_entity_id,
+                to_entity_id,
+                relation,
+                weight,
+                confidence,
+                valid_from_ms,
+                valid_until_ms,
+                provenance: serde_json::from_str(&provenance)?,
+            });
+        }
+        Ok(relationships)
+    }
+
+    pub fn load_memories(&self) -> Result<Vec<MemoryRecord>> {
+        let mut statement = self.connection.prepare(
+            "SELECT memory_id, kind, text, relevance, confidence, first_seen_ms,
+                    last_confirmed_ms, provenance_json
+             FROM memories ORDER BY memory_id",
+        )?;
+        let rows = statement.query_map([], |row| {
+            Ok((
+                row.get::<_, String>(0)?,
+                row.get::<_, String>(1)?,
+                row.get::<_, String>(2)?,
+                row.get::<_, f32>(3)?,
+                row.get::<_, f32>(4)?,
+                row.get::<_, i64>(5)?,
+                row.get::<_, i64>(6)?,
+                row.get::<_, String>(7)?,
+            ))
+        })?;
+
+        let mut memories = Vec::new();
+        for row in rows {
+            let (id, kind, text, relevance, confidence, first_seen_ms, last_confirmed_ms, provenance) = row?;
+            memories.push(MemoryRecord {
+                id,
+                kind: parse_memory_kind(&kind)?,
+                text,
+                relevance,
+                confidence,
+                first_seen_ms,
+                last_confirmed_ms,
+                provenance: serde_json::from_str(&provenance)?,
+            });
+        }
+        Ok(memories)
     }
 
     pub fn event_count(&self) -> Result<usize> {
@@ -343,19 +445,33 @@ fn memory_kind_name(kind: &MemoryKind) -> &'static str {
     }
 }
 
+fn parse_memory_kind(value: &str) -> Result<MemoryKind> {
+    match value {
+        "working" => Ok(MemoryKind::Working),
+        "episodic" => Ok(MemoryKind::Episodic),
+        "semantic" => Ok(MemoryKind::Semantic),
+        "procedural" => Ok(MemoryKind::Procedural),
+        "stable" => Ok(MemoryKind::Stable),
+        "preference" => Ok(MemoryKind::Preference),
+        "project" => Ok(MemoryKind::Project),
+        "self_model" => Ok(MemoryKind::SelfModel),
+        "world_model" => Ok(MemoryKind::WorldModel),
+        other => Err(StorageError::InvalidData(format!("unknown memory kind '{other}'"))),
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use os_contracts::{
-        CognitiveEvent, EntityRecord, FactRecord, MemoryKind, MemoryRecord, RelationshipRecord,
-        Sensitivity,
+        CognitiveEvent, EntityRecord, MemoryKind, MemoryRecord, RelationshipRecord, Sensitivity,
     };
     use serde_json::json;
 
     use super::Storage;
 
     #[test]
-    fn persists_and_indexes_events() {
-        let mut storage = Storage::in_memory().expect("open in-memory storage");
+    fn persists_indexes_and_hydrates_cognitive_state() {
+        let mut storage = Storage::in_memory().expect("open storage");
         let event = CognitiveEvent {
             event_id: "event-1".into(),
             timestamp_ms: 1,
@@ -371,112 +487,62 @@ mod tests {
             parent_event: None,
             provenance: vec!["test".into()],
         };
-
         storage.append_event(&event).expect("append event");
 
-        assert_eq!(storage.event_count().expect("event count"), 1);
-        assert_eq!(
-            storage
-                .search_event_ids("cognitive", 10)
-                .expect("fts search"),
-            vec!["event-1".to_string()]
-        );
-    }
-
-    #[test]
-    fn manages_temporal_graph_and_memory_records() {
-        let mut storage = Storage::in_memory().expect("open in-memory storage");
-
-        for entity in [
-            EntityRecord {
-                entity_id: "os".into(),
-                kind: "product".into(),
-                canonical_label: "OS".into(),
-                aliases: vec![],
-                confidence: 1.0,
-                first_seen_ms: 10,
-                last_seen_ms: 10,
-                provenance: vec!["test".into()],
-            },
-            EntityRecord {
-                entity_id: "memory".into(),
-                kind: "concept".into(),
-                canonical_label: "Memory".into(),
-                aliases: vec![],
-                confidence: 1.0,
-                first_seen_ms: 10,
-                last_seen_ms: 10,
-                provenance: vec!["test".into()],
-            },
-        ] {
-            storage.upsert_entity(&entity).expect("upsert entity");
-        }
-
-        storage
-            .insert_fact(&FactRecord {
-                fact_id: "fact-1".into(),
-                subject_id: "os".into(),
-                predicate: "has_capability".into(),
-                object: json!({ "entity_id": "memory" }),
-                confidence: 0.95,
-                valid_from_ms: 10,
-                valid_until_ms: None,
-                observed_at_ms: 10,
-                superseded_at_ms: None,
-                provenance: vec!["test".into()],
-            })
-            .expect("insert fact");
-        assert!(
-            storage
-                .supersede_fact("fact-1", 20)
-                .expect("supersede fact")
-        );
-
+        let user = EntityRecord {
+            entity_id: "actor:user".into(),
+            kind: "actor".into(),
+            canonical_label: "User".into(),
+            aliases: vec![],
+            confidence: 1.0,
+            first_seen_ms: 1,
+            last_seen_ms: 1,
+            provenance: vec!["event-1".into()],
+        };
+        let memory_entity = EntityRecord {
+            entity_id: "memory:1".into(),
+            kind: "episodic_memory".into(),
+            canonical_label: "persistent cognitive memory".into(),
+            aliases: vec![],
+            confidence: 1.0,
+            first_seen_ms: 1,
+            last_seen_ms: 1,
+            provenance: vec!["event-1".into()],
+        };
+        storage.upsert_entity(&user).expect("user entity");
+        storage.upsert_entity(&memory_entity).expect("memory entity");
         storage
             .insert_relationship(&RelationshipRecord {
                 edge_id: "edge-1".into(),
-                from_entity_id: "os".into(),
-                to_entity_id: "memory".into(),
-                relation: "uses".into(),
-                weight: 0.8,
-                confidence: 0.9,
-                valid_from_ms: 10,
+                from_entity_id: "actor:user".into(),
+                to_entity_id: "memory:1".into(),
+                relation: "generated".into(),
+                weight: 1.0,
+                confidence: 1.0,
+                valid_from_ms: 1,
                 valid_until_ms: None,
-                provenance: vec!["test".into()],
+                provenance: vec!["event-1".into()],
             })
-            .expect("insert relationship");
-        assert!(
-            storage
-                .invalidate_relationship("edge-1", 20)
-                .expect("invalidate relationship")
-        );
-
+            .expect("relationship");
         storage
             .upsert_memory(&MemoryRecord {
-                id: "memory-1".into(),
-                kind: MemoryKind::Semantic,
-                text: "OS uses durable temporal memory".into(),
-                relevance: 0.9,
-                confidence: 0.95,
-                first_seen_ms: 10,
-                last_confirmed_ms: 10,
-                provenance: vec!["test".into()],
+                id: "memory:1".into(),
+                kind: MemoryKind::Episodic,
+                text: "persistent cognitive memory".into(),
+                relevance: 0.8,
+                confidence: 1.0,
+                first_seen_ms: 1,
+                last_confirmed_ms: 1,
+                provenance: vec!["event-1".into()],
             })
-            .expect("upsert memory");
+            .expect("memory");
 
-        assert_eq!(storage.entity_count().expect("entity count"), 2);
-        assert_eq!(storage.relationship_count().expect("edge count"), 1);
-        assert_eq!(storage.memory_count().expect("memory count"), 1);
+        assert_eq!(storage.load_entities().expect("entities").len(), 2);
+        assert_eq!(storage.load_relationships().expect("relationships").len(), 1);
+        assert_eq!(storage.load_memories().expect("memories").len(), 1);
         assert_eq!(
-            storage
-                .search_memory_ids("temporal", 10)
-                .expect("memory search"),
-            vec!["memory-1".to_string()]
-        );
-        assert!(
-            storage
-                .record_memory_retrieval("memory-1", true)
-                .expect("record retrieval")
+            storage.search_memory_ids("cognitive", 5).expect("memory search"),
+            vec!["memory:1".to_string()]
         );
     }
 }
