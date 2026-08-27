@@ -4,6 +4,7 @@ import { VertexBuffer } from "@babylonjs/core/Buffers/buffer";
 import { ComputeShader } from "@babylonjs/core/Compute/computeShader";
 import type { AbstractEngine } from "@babylonjs/core/Engines/abstractEngine";
 import { Constants } from "@babylonjs/core/Engines/constants";
+import type { WebGPUEngine } from "@babylonjs/core/Engines/webgpuEngine";
 import { StandardMaterial } from "@babylonjs/core/Materials/standardMaterial";
 import { Color3 } from "@babylonjs/core/Maths/math.color";
 import { Mesh } from "@babylonjs/core/Meshes/mesh";
@@ -52,18 +53,14 @@ fn main(@builtin(global_invocation_id) gid: vec3<u32>) {
   var radius = 5.0 + seedA * params.radius;
   var y = (seedB - 0.5) * params.vertical;
 
-  // Each OS Void gets a distinct large-scale signal choreography while remaining deterministic.
   if (workspace == 2u) {
-    // Memory Archive: temporal helix / depth strata.
     angle = i * 0.087 + params.time * 0.012 * motion;
     radius = 7.0 + seedA * params.radius * 0.72;
     y = (fract(i * 0.013) - 0.5) * params.vertical * 1.35 + sin(angle * 0.28) * 1.4;
   } else if (workspace == 3u) {
-    // Agent Operations: compact execution orbits.
     radius = 4.0 + floor(seedA * 5.0) * 3.25 + seedC * 1.4;
     y = (seedB - 0.5) * params.vertical * 0.55 + sin(angle * 1.7 + params.time) * 0.35 * energy;
   } else if (workspace == 4u) {
-    // Developer Matrix: trace rails and diagnostic bands.
     let lane = floor(seedA * 11.0) - 5.0;
     let travel = fract(seedB + params.time * (0.015 + motion * 0.028));
     let x = (travel - 0.5) * params.radius * 2.0;
@@ -72,16 +69,13 @@ fn main(@builtin(global_invocation_id) gid: vec3<u32>) {
     particles[index] = vec4<f32>(x, yy, z, 1.0);
     return;
   } else if (workspace == 5u) {
-    // System Fabric: concentric infrastructure rings.
     radius = 5.0 + floor(seedA * 9.0) * 2.4 + seedC * 0.8;
     y = (floor(seedB * 7.0) - 3.0) * 1.2;
   } else if (workspace == 6u) {
-    // Configuration Chamber: restrained core shell.
     radius = 5.5 + seedA * min(params.radius, 12.0);
     y = (seedB - 0.5) * min(params.vertical, 8.0);
     angle = i * golden + params.time * 0.006 * motion;
   } else if (workspace == 7u) {
-    // Automation Circuit: flowing lanes around the central execution plane.
     let lane = floor(seedA * 9.0) - 4.0;
     let travel = fract(seedB + params.time * (0.018 + motion * 0.03));
     let x = (travel - 0.5) * params.radius * 1.8;
@@ -123,13 +117,6 @@ export type GpuSignalFieldOptions = {
   pointSize: number;
 };
 
-/**
- * WebGPU-only ambient signal field.
- *
- * Positions live in one storage buffer that is also bound directly as a vertex buffer. A WGSL
- * compute shader mutates that buffer every frame and Babylon renders it without any GPU -> CPU
- * readback. This is the first OS rendering path where simulation data never leaves the GPU.
- */
 export class GpuSignalField {
   readonly count: number;
   private readonly engine: AbstractEngine;
@@ -154,6 +141,7 @@ export class GpuSignalField {
       throw new Error("WebGPU compute shaders are not supported by this engine.");
     }
 
+    const webgpuEngine = engine as WebGPUEngine;
     this.engine = engine;
     this.count = Math.max(64, Math.floor(options.count));
     this.radius = Math.max(8, options.radius);
@@ -161,7 +149,7 @@ export class GpuSignalField {
 
     const particleData = new Float32Array(this.count * 4);
     this.particles = new StorageBuffer(
-      engine,
+      webgpuEngine,
       particleData.byteLength,
       Constants.BUFFER_CREATIONFLAG_READWRITE | Constants.BUFFER_CREATIONFLAG_VERTEX,
       "OS GPU signal particle storage",
@@ -169,7 +157,7 @@ export class GpuSignalField {
     this.particles.update(particleData);
 
     this.params = new StorageBuffer(
-      engine,
+      webgpuEngine,
       this.parameterData.byteLength,
       Constants.BUFFER_CREATIONFLAG_READWRITE,
       "OS GPU signal parameters",
@@ -262,7 +250,6 @@ export class GpuSignalField {
     this.vertexBuffer.dispose();
     this.particles.dispose();
     this.params.dispose();
-    // ComputeShader currently owns no explicit dispose() method; its GPU context is released with the engine.
     void this.engine;
   }
 }
