@@ -17,3 +17,4 @@ serde.workspace = true
 os-contracts = { path = "../../../crates/contracts" }
 os-kernel = { path = "../../../crates/kernel" }
 os-model-gateway = { path = "../../../crates/model-gateway" }
+os-semantic-index = { path = "../../../crates/semantic-index" }
