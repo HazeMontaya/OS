@@ -55,6 +55,45 @@ pub enum MemoryKind {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct EntityRecord {
+    pub entity_id: String,
+    pub kind: String,
+    pub canonical_label: String,
+    pub aliases: Vec<String>,
+    pub confidence: f32,
+    pub first_seen_ms: i64,
+    pub last_seen_ms: i64,
+    pub provenance: Vec<String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct FactRecord {
+    pub fact_id: String,
+    pub subject_id: String,
+    pub predicate: String,
+    pub object: Value,
+    pub confidence: f32,
+    pub valid_from_ms: i64,
+    pub valid_until_ms: Option<i64>,
+    pub observed_at_ms: i64,
+    pub superseded_at_ms: Option<i64>,
+    pub provenance: Vec<String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct RelationshipRecord {
+    pub edge_id: String,
+    pub from_entity_id: String,
+    pub to_entity_id: String,
+    pub relation: String,
+    pub weight: f32,
+    pub confidence: f32,
+    pub valid_from_ms: i64,
+    pub valid_until_ms: Option<i64>,
+    pub provenance: Vec<String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct CognitiveNode {
     pub id: String,
     pub kind: String,
