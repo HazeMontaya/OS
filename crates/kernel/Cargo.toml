@@ -10,6 +10,8 @@ os-event-ledger = { path = "../event-ledger" }
 os-memory = { path = "../memory" }
 os-knowledge-graph = { path = "../knowledge-graph" }
 os-storage = { path = "../storage" }
+os-retrieval = { path = "../retrieval" }
+os-telemetry = { path = "../telemetry" }
 serde_json.workspace = true
 thiserror.workspace = true
 uuid.workspace = true
