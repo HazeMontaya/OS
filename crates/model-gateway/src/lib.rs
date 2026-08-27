@@ -730,12 +730,18 @@ mod tests {
     use serde_json::json;
 
     #[test]
-    fn api_keys_from_env() {
-        std::env::set_var("OPENAI_API_KEY", "test-key");
-        let keys = ApiKeys::from_env();
-        assert_eq!(keys.key_for(&CloudProvider::OpenAI), "test-key");
-        assert_eq!(keys.key_for(&CloudProvider::Anthropic), "");
-        std::env::remove_var("OPENAI_API_KEY");
+    fn api_keys_select_provider_without_mutating_process_environment() {
+        let keys = ApiKeys {
+            openai: "openai-key".into(),
+            anthropic: "anthropic-key".into(),
+            openrouter: "openrouter-key".into(),
+            ollama: "ollama-key".into(),
+        };
+        assert_eq!(keys.key_for(&CloudProvider::OpenAI), "openai-key");
+        assert_eq!(keys.key_for(&CloudProvider::Anthropic), "anthropic-key");
+        assert_eq!(keys.key_for(&CloudProvider::OpenRouter), "openrouter-key");
+        assert_eq!(keys.key_for(&CloudProvider::Ollama), "ollama-key");
+        assert_eq!(keys.key_for(&CloudProvider::Custom("private".into())), "");
     }
 
     #[test]
