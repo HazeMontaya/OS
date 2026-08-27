@@ -6,6 +6,7 @@ members = [
   "crates/event-ledger",
   "crates/memory",
   "crates/knowledge-graph",
+  "crates/storage",
   "crates/kernel",
 ]
 
