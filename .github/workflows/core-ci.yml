@@ -1,0 +1,35 @@
+name: Core CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+permissions:
+  contents: read
+
+jobs:
+  rust-core:
+    name: Rust cognitive core
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install stable Rust
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          components: clippy,rustfmt
+
+      - name: Cache Rust build
+        uses: Swatinem/rust-cache@v2
+
+      - name: Format check
+        run: cargo fmt --all -- --check
+
+      - name: Core tests
+        run: cargo test --workspace --exclude os-desktop
+
+      - name: Core clippy
+        run: cargo clippy --workspace --exclude os-desktop --all-targets -- -D warnings
