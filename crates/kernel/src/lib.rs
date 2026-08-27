@@ -4,8 +4,8 @@ use std::{
 };
 
 use os_contracts::{
-    CognitiveEdge, CognitiveEvent, CognitiveNode, EntityRecord, MemoryKind, MemoryRecord,
-    RelationshipRecord, Sensitivity, SystemSnapshot,
+    CognitiveEdge, CognitiveEvent, CognitiveNode, EntityRecord, GraphSnapshot, MemoryKind,
+    MemoryRecord, RelationshipRecord, Sensitivity, SystemSnapshot,
 };
 use os_event_ledger::EventLedger;
 use os_knowledge_graph::KnowledgeGraph;
@@ -207,6 +207,10 @@ impl Kernel {
         }
     }
 
+    pub fn graph_snapshot(&self) -> GraphSnapshot {
+        self.graph.snapshot()
+    }
+
     pub fn telemetry_count(&self) -> usize {
         self.telemetry.len()
     }
@@ -245,6 +249,8 @@ mod tests {
         assert_eq!(snapshot.node_count, 2);
         assert_eq!(snapshot.edge_count, 1);
         assert_eq!(kernel.telemetry_count(), 1);
+        assert_eq!(kernel.graph_snapshot().nodes.len(), 2);
+        assert_eq!(kernel.graph_snapshot().edges.len(), 1);
     }
 
     #[test]
