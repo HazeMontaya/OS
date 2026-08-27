@@ -34,22 +34,68 @@ pub struct Kernel {
 
 impl Kernel {
     pub fn open(path: impl AsRef<Path>) -> Result<Self, KernelError> {
-        Ok(Self {
-            storage: Storage::open(path)?,
-            ledger: EventLedger::default(),
-            memory: MemoryStore::default(),
-            graph: KnowledgeGraph::default(),
-            retrieval: RetrievalEngine::default(),
-            telemetry: TelemetryBuffer::default(),
-        })
+        Self::from_storage(Storage::open(path)?)
     }
 
     pub fn in_memory() -> Result<Self, KernelError> {
+        Self::from_storage(Storage::in_memory()?)
+    }
+
+    fn from_storage(storage: Storage) -> Result<Self, KernelError> {
+        let mut memory = MemoryStore::default();
+        for record in storage.load_memories()? {
+            memory.upsert(record);
+        }
+
+        let mut graph = KnowledgeGraph::default();
+        for entity in storage.load_entities()? {
+            let importance = node_importance(&entity.kind);
+            graph.upsert_node(CognitiveNode {
+                id: entity.entity_id,
+                kind: entity.kind,
+                label: entity.canonical_label,
+                importance,
+                confidence: entity.confidence,
+            });
+        }
+        for relationship in storage.load_relationships()? {
+            graph.add_edge(CognitiveEdge {
+                id: relationship.edge_id,
+                from: relationship.from_entity_id,
+                to: relationship.to_entity_id,
+                relation: relationship.relation,
+                weight: relationship.weight,
+                valid_from_ms: relationship.valid_from_ms,
+                valid_until_ms: relationship.valid_until_ms,
+                provenance: relationship.provenance,
+            });
+        }
+
+        let now = now_ms();
+        let self_entity = EntityRecord {
+            entity_id: "self:os".into(),
+            kind: "self_model".into(),
+            canonical_label: "OS".into(),
+            aliases: vec!["Cognitive Operating Environment".into()],
+            confidence: 1.0,
+            first_seen_ms: now,
+            last_seen_ms: now,
+            provenance: vec!["kernel:bootstrap".into()],
+        };
+        storage.upsert_entity(&self_entity)?;
+        graph.upsert_node(CognitiveNode {
+            id: self_entity.entity_id,
+            kind: self_entity.kind,
+            label: self_entity.canonical_label,
+            importance: 1.0,
+            confidence: 1.0,
+        });
+
         Ok(Self {
-            storage: Storage::in_memory()?,
+            storage,
             ledger: EventLedger::default(),
-            memory: MemoryStore::default(),
-            graph: KnowledgeGraph::default(),
+            memory,
+            graph,
             retrieval: RetrievalEngine::default(),
             telemetry: TelemetryBuffer::default(),
         })
@@ -145,14 +191,14 @@ impl Kernel {
             id: actor_id.clone(),
             kind: "actor".into(),
             label: "User".into(),
-            importance: 1.0,
+            importance: node_importance("actor"),
             confidence: 1.0,
         });
         self.graph.upsert_node(CognitiveNode {
             id: memory_id.clone(),
             kind: "episodic_memory".into(),
             label: compact_label(&content),
-            importance: 0.75,
+            importance: node_importance("episodic_memory"),
             confidence: 1.0,
         });
         self.graph.add_edge(CognitiveEdge {
@@ -216,6 +262,18 @@ impl Kernel {
     }
 }
 
+fn node_importance(kind: &str) -> f32 {
+    match kind {
+        "self_model" => 1.0,
+        "actor" => 0.95,
+        "semantic_memory" | "stable_memory" => 0.85,
+        "episodic_memory" => 0.70,
+        "project" | "goal" => 0.82,
+        "agent" | "model" | "tool" => 0.78,
+        _ => 0.55,
+    }
+}
+
 fn compact_label(value: &str) -> String {
     const MAX: usize = 72;
     let mut label = value.chars().take(MAX).collect::<String>();
@@ -237,6 +295,14 @@ mod tests {
     use super::Kernel;
 
     #[test]
+    fn kernel_bootstraps_self_model() {
+        let kernel = Kernel::in_memory().expect("create kernel");
+        let graph = kernel.graph_snapshot();
+        assert_eq!(graph.nodes.len(), 1);
+        assert_eq!(graph.nodes[0].id, "self:os");
+    }
+
+    #[test]
     fn input_materializes_event_memory_and_graph() {
         let mut kernel = Kernel::in_memory().expect("create kernel");
         kernel
@@ -246,10 +312,10 @@ mod tests {
         let snapshot = kernel.snapshot();
         assert_eq!(snapshot.event_count, 1);
         assert_eq!(snapshot.memory_count, 1);
-        assert_eq!(snapshot.node_count, 2);
+        assert_eq!(snapshot.node_count, 3);
         assert_eq!(snapshot.edge_count, 1);
         assert_eq!(kernel.telemetry_count(), 1);
-        assert_eq!(kernel.graph_snapshot().nodes.len(), 2);
+        assert_eq!(kernel.graph_snapshot().nodes.len(), 3);
         assert_eq!(kernel.graph_snapshot().edges.len(), 1);
     }
 
