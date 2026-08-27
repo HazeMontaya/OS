@@ -81,11 +81,11 @@ function Ensure-WingetPackage {
     }
 
     Write-OsStep "Installing $DisplayName ($PackageId) ..."
-    $args = @(
+    $wingetArguments = @(
         "install", "--id", $PackageId, "-e", "--source", "winget",
         "--accept-source-agreements", "--accept-package-agreements", "--silent"
     ) + $ExtraArguments
-    Invoke-OsNative "winget" @args
+    Invoke-OsNative "winget" @wingetArguments
     Refresh-OsPath
 
     if (-not (Test-OsCommand $Command)) {
@@ -94,7 +94,11 @@ function Ensure-WingetPackage {
 }
 
 function Get-VsWherePath {
-    $candidate = Join-Path ${env:ProgramFiles(x86)} "Microsoft Visual Studio\Installer\vswhere.exe"
+    $programFilesX86 = ${env:ProgramFiles(x86)}
+    if ([string]::IsNullOrWhiteSpace($programFilesX86)) {
+        return $null
+    }
+    $candidate = Join-Path $programFilesX86 "Microsoft Visual Studio\Installer\vswhere.exe"
     if (Test-Path -LiteralPath $candidate) {
         return $candidate
     }
@@ -112,10 +116,14 @@ function Test-MsvcBuildTools {
 }
 
 function Test-WebView2Runtime {
-    $roots = @(
-        (Join-Path ${env:ProgramFiles(x86)} "Microsoft\EdgeWebView\Application"),
-        (Join-Path $env:ProgramFiles "Microsoft\EdgeWebView\Application")
-    ) | Where-Object { -not [string]::IsNullOrWhiteSpace($_) }
+    $roots = @()
+    $programFilesX86 = ${env:ProgramFiles(x86)}
+    if (-not [string]::IsNullOrWhiteSpace($programFilesX86)) {
+        $roots += (Join-Path $programFilesX86 "Microsoft\EdgeWebView\Application")
+    }
+    if (-not [string]::IsNullOrWhiteSpace($env:ProgramFiles)) {
+        $roots += (Join-Path $env:ProgramFiles "Microsoft\EdgeWebView\Application")
+    }
 
     foreach ($root in $roots) {
         if (-not (Test-Path -LiteralPath $root)) { continue }
