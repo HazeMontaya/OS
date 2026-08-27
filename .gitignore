@@ -7,6 +7,10 @@
 *.p12
 *.pfx
 
+# local bootstrap / machine state
+.tools/
+.os-local/
+
 # JS / frontend caches
 node_modules/
 dist/

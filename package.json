@@ -4,10 +4,14 @@
   "version": "0.1.0",
   "scripts": {
     "dev": "pnpm --filter @os/desktop tauri dev",
+    "start": "pnpm dev",
     "build": "pnpm --filter @os/desktop tauri build",
+    "build:app": "pnpm --filter @os/desktop tauri build --no-bundle",
+    "bundle:windows": "pnpm --filter @os/desktop tauri bundle --bundles nsis",
     "typecheck": "pnpm -r --if-present typecheck",
     "typecheck:desktop": "pnpm --filter @os/desktop typecheck",
     "test:core": "cargo test --workspace --exclude os-desktop",
+    "doctor:core": "cargo run -p os-cli -- doctor",
     "check": "cargo check --workspace && pnpm typecheck"
   }
 }

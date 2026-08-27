@@ -10,6 +10,8 @@ set "REPORT=%LOCAL_DIR%\.os-sync-excluded-local.txt"
 set "TMP_INDEX=%TEMP%\os-upload-index-%RANDOM%-%RANDOM%.tmp"
 set "TMP_LIST=%TEMP%\os-upload-files-%RANDOM%-%RANDOM%.txt"
 set "TMP_LARGE=%TEMP%\os-upload-large-%RANDOM%-%RANDOM%.txt"
+set "FORCE_STALE=0"
+if /I "%~1"=="--force-stale" set "FORCE_STALE=1"
 
 echo ============================================================
 echo  OS MIRROR: %LOCAL_DIR% -^> ONLINE GITHUB
@@ -59,7 +61,7 @@ if errorlevel 1 git config user.name "OS Repository Sync"
 git config user.email >nul 2>&1
 if errorlevel 1 git config user.email "os-sync@localhost"
 
-echo [1/8] Lade den aktuellen Online-Stand als sichere Basis ...
+echo [1/9] Lade den aktuellen Online-Stand als sichere Basis ...
 git fetch --prune origin "%BRANCH%"
 if errorlevel 1 goto :git_error
 
@@ -70,7 +72,35 @@ if not defined REMOTE_SHA (
     goto :git_error
 )
 
-echo [2/8] Erzeuge einen frischen Git-Index nur aus dem aktuellen S:\OS-Dateisystem ...
+echo [2/9] Pruefe, ob dieser lokale Clone den aktuellen Online-Stand kennt ...
+set "LOCAL_HEAD="
+for /f "delims=" %%H in ('git rev-parse HEAD 2^>nul') do set "LOCAL_HEAD=%%H"
+if not defined LOCAL_HEAD (
+    echo [FEHLER] Lokaler HEAD konnte nicht ermittelt werden.
+    goto :git_error
+)
+
+if "%FORCE_STALE%"=="0" (
+    git merge-base --is-ancestor "%REMOTE_SHA%" "%LOCAL_HEAD%" >nul 2>&1
+    if errorlevel 1 (
+        echo.
+        echo [SICHERHEITSSTOPP] S:\OS basiert NICHT auf dem aktuellen origin/%BRANCH%.
+        echo Der Online-Stand ist neuer oder die Historie ist auseinander gelaufen.
+        echo.
+        echo Fuehre zuerst GIT-DOWNLOAD.cmd aus und uebertrage danach deine beabsichtigten
+        echo lokalen Aenderungen in den frischen Clone. Damit kann ein alter lokaler Mirror
+        echo keine neueren Online-Implementierungen versehentlich wieder entfernen.
+        echo.
+        echo Nur fuer eine bewusst beabsichtigte Notfall-Ueberschreibung existiert:
+        echo   GIT-UPLOAD.cmd --force-stale
+        echo.
+        goto :git_error
+    )
+) else (
+    echo [WARNUNG] --force-stale aktiv: Freshness-Guard wurde bewusst uebergangen.
+)
+
+echo [3/9] Erzeuge einen frischen Git-Index nur aus dem aktuellen S:\OS-Dateisystem ...
 if exist "%TMP_INDEX%" del /f /q "%TMP_INDEX%" >nul 2>&1
 set "GIT_INDEX_FILE=%TMP_INDEX%"
 git read-tree --empty
@@ -78,7 +108,7 @@ if errorlevel 1 goto :git_error
 git add -A -- .
 if errorlevel 1 goto :git_error
 
-echo [3/8] Pruefe alle Upload-Dateien auf GitHub-Groessenlimits ...
+echo [4/9] Pruefe alle Upload-Dateien auf GitHub-Groessenlimits ...
 git ls-files > "%TMP_LIST%"
 if errorlevel 1 goto :git_error
 powershell -NoProfile -ExecutionPolicy Bypass -Command ^
@@ -104,17 +134,17 @@ if exist "%TMP_LARGE%" (
 rem Der lokale Diagnosebericht gehoert nie in das Online-Repository.
 git rm --cached --ignore-unmatch -- ".os-sync-excluded-local.txt" >nul 2>&1
 
-echo [4/8] Erzeuge den exakten bereinigten Repository-Baum ...
+echo [5/9] Erzeuge den exakten bereinigten Repository-Baum ...
 set "TREE_SHA="
 for /f "delims=" %%T in ('git write-tree') do set "TREE_SHA=%%T"
 if not defined TREE_SHA goto :git_error
 
-echo [5/8] Erzeuge einen neuen Mirror-Commit direkt auf origin/%BRANCH% ...
+echo [6/9] Erzeuge einen neuen Mirror-Commit direkt auf origin/%BRANCH% ...
 set "MIRROR_COMMIT="
 for /f "delims=" %%C in ('echo sync: replace online main with clean S:\OS mirror^| git commit-tree "%TREE_SHA%" -p "%REMOTE_SHA%"') do set "MIRROR_COMMIT=%%C"
 if not defined MIRROR_COMMIT goto :git_error
 
-echo [6/8] Ersetze den kompletten Online-Dateibaum ...
+echo [7/9] Ersetze den kompletten Online-Dateibaum ...
 git push origin "%MIRROR_COMMIT%:refs/heads/%BRANCH%"
 if errorlevel 1 (
     echo.
@@ -123,7 +153,7 @@ if errorlevel 1 (
     goto :git_error
 )
 
-echo [7/8] Aktualisiere den lokalen main-Zeiger auf denselben Mirror-Commit ...
+echo [8/9] Aktualisiere den lokalen main-Zeiger auf denselben Mirror-Commit ...
 set "GIT_INDEX_FILE="
 git update-ref "refs/heads/%BRANCH%" "%MIRROR_COMMIT%"
 if errorlevel 1 goto :git_error
@@ -133,7 +163,7 @@ if /I "!CURRENT_BRANCH!"=="%BRANCH%" (
     if errorlevel 1 goto :git_error
 )
 
-echo [8/8] Verifiziere Online- und Mirror-Commit ...
+echo [9/9] Verifiziere Online- und Mirror-Commit ...
 git fetch --prune origin "%BRANCH%" >nul 2>&1
 set "VERIFY_SHA="
 for /f "delims=" %%V in ('git rev-parse "refs/remotes/origin/%BRANCH%" 2^>nul') do set "VERIFY_SHA=%%V"
@@ -166,6 +196,6 @@ exit /b 0
 call :cleanup_temp
 echo.
 echo [FEHLER] Upload/Mirror wurde nicht vollstaendig abgeschlossen.
-echo Pruefe Netzwerk, GitHub-Anmeldung, Dateinamen und die Meldungen oberhalb.
+echo Pruefe Netzwerk, GitHub-Anmeldung, Freshness, Dateinamen und die Meldungen oberhalb.
 pause
 exit /b 1
