@@ -622,7 +622,11 @@ mod tests {
             )
             .expect("hybrid context pack");
         assert_eq!(pack.items.len(), 1);
-        assert!(pack.items[0].text.contains("hierarchical spatial clustering"));
+        assert!(
+            pack.items[0]
+                .text
+                .contains("hierarchical spatial clustering")
+        );
     }
 
     #[test]
