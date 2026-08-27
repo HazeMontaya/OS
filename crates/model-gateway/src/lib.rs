@@ -217,7 +217,10 @@ impl LlamaCppClient {
         Ok(ModelCompletion {
             text,
             model: response.model.unwrap_or_else(|| model.to_string()),
-            prompt_tokens: response.usage.as_ref().and_then(|usage| usage.prompt_tokens),
+            prompt_tokens: response
+                .usage
+                .as_ref()
+                .and_then(|usage| usage.prompt_tokens),
             completion_tokens: response
                 .usage
                 .as_ref()
@@ -233,11 +236,7 @@ impl LlamaCppClient {
     }
 
     fn endpoint(&self, path: &str) -> String {
-        format!(
-            "{}{}",
-            self.config.server_root.trim_end_matches('/'),
-            path
-        )
+        format!("{}{}", self.config.server_root.trim_end_matches('/'), path)
     }
 }
 
@@ -303,7 +302,7 @@ fn extract_text(content: &Value) -> Option<String> {
 
 #[cfg(test)]
 mod tests {
-    use super::{extract_text, LlamaCppClient, ModelDescriptor, ModelKind, ModelRegistry};
+    use super::{LlamaCppClient, ModelDescriptor, ModelKind, ModelRegistry, extract_text};
     use serde_json::json;
 
     #[test]
@@ -337,7 +336,10 @@ mod tests {
     #[test]
     fn local_client_targets_llama_server_v1() {
         let client = LlamaCppClient::local("").expect("create local client");
-        assert_eq!(client.endpoint("/v1/models"), "http://127.0.0.1:8080/v1/models");
+        assert_eq!(
+            client.endpoint("/v1/models"),
+            "http://127.0.0.1:8080/v1/models"
+        );
         assert_eq!(client.configured_model(), "");
     }
 
