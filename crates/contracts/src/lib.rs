@@ -71,6 +71,13 @@ pub struct ContextPack {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct AskResult {
+    pub text: String,
+    pub model: String,
+    pub context: ContextPack,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct EntityRecord {
     pub entity_id: String,
     pub kind: String,
