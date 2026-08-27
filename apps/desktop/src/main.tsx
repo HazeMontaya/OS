@@ -4,6 +4,7 @@ import App from "./App";
 import "./styles.css";
 import "./analytics/analytics.css";
 import "./analytics/trace.css";
+import "./inspector/inspector.css";
 
 createRoot(document.getElementById("root")!).render(
   <StrictMode>
