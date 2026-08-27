@@ -8,6 +8,7 @@ import { HemisphericLight } from "@babylonjs/core/Lights/hemisphericLight";
 import { StandardMaterial } from "@babylonjs/core/Materials/standardMaterial";
 import { Color3, Color4 } from "@babylonjs/core/Maths/math.color";
 import { Vector3 } from "@babylonjs/core/Maths/math.vector";
+import { LinesMesh } from "@babylonjs/core/Meshes/linesMesh";
 import { MeshBuilder } from "@babylonjs/core/Meshes/meshBuilder";
 import { Scene } from "@babylonjs/core/scene";
 import type {
@@ -93,6 +94,13 @@ function nodeEnergy(node: CognitiveNode) {
   }
 }
 
+function phaseEnergy(phase: CognitiveActivityPhase | null) {
+  if (phase === "memory_recall") return new Color3(0.2, 0.82, 0.94);
+  if (phase === "model_inference") return new Color3(0.7, 0.48, 1);
+  if (phase === "output_persist") return new Color3(0.38, 0.94, 0.76);
+  return new Color3(0.26, 0.56, 0.92);
+}
+
 function participatesInPhase(kind: string, phase: CognitiveActivityPhase | null) {
   if (!phase) return false;
   if (phase === "memory_recall") return kind.includes("memory");
@@ -148,6 +156,7 @@ function renderGraph(scene: Scene, graph: GraphSnapshot) {
     return left.id.localeCompare(right.id);
   });
   const positions = new Map<string, Vector3>();
+  const nodeKinds = new Map(graph.nodes.map((node) => [node.id, node.kind]));
 
   orderedNodes.forEach((node, index) => {
     const position = nodePosition(node, index);
@@ -182,6 +191,11 @@ function renderGraph(scene: Scene, graph: GraphSnapshot) {
     sphere.material = material;
   });
 
+  const tracerMaterial = new StandardMaterial("cog-material:trace-packet", scene);
+  tracerMaterial.emissiveColor = new Color3(0.55, 0.9, 1);
+  tracerMaterial.diffuseColor = new Color3(0.04, 0.1, 0.14);
+  tracerMaterial.alpha = 0.92;
+
   graph.edges.forEach((edge) => {
     const from = positions.get(edge.from);
     const to = positions.get(edge.to);
@@ -189,6 +203,9 @@ function renderGraph(scene: Scene, graph: GraphSnapshot) {
 
     const historical = edge.valid_until_ms !== null;
     const weight = Math.max(0, Math.min(1, edge.weight));
+    const baseAlpha = historical ? 0.08 : 0.18 + weight * 0.52;
+    const fromKind = nodeKinds.get(edge.from) ?? "unknown";
+    const toKind = nodeKinds.get(edge.to) ?? "unknown";
     const line = MeshBuilder.CreateLines(
       `cog-edge:${edge.id}`,
       { points: [from, to], updatable: false },
@@ -200,12 +217,35 @@ function renderGraph(scene: Scene, graph: GraphSnapshot) {
       id: edge.id,
       relation: edge.relation,
       historical,
+      baseAlpha,
+      fromKind,
+      toKind,
     };
     line.color = historical
       ? new Color3(0.28, 0.34, 0.44)
       : new Color3(0.16, 0.46, 0.84);
-    line.alpha = historical ? 0.08 : 0.18 + weight * 0.52;
+    line.alpha = baseAlpha;
     line.isPickable = true;
+
+    if (!historical) {
+      const tracer = MeshBuilder.CreateSphere(
+        `cog-tracer:${edge.id}`,
+        { diameter: 0.09, segments: 8 },
+        scene,
+      );
+      tracer.material = tracerMaterial;
+      tracer.isPickable = false;
+      tracer.isVisible = false;
+      tracer.metadata = {
+        cognitive: true,
+        cognitiveTracer: true,
+        from: from.clone(),
+        to: to.clone(),
+        fromKind,
+        toKind,
+        offset: hashUnit(edge.id),
+      };
+    }
   });
 }
 
@@ -282,11 +322,47 @@ export default function CognitiveVoid({ graph, activity, phase }: CognitiveVoidP
         const wave = Math.sin(time * (currentPhase ? 5.2 : 2.4) + activityRef.current * 0.31);
 
         scene?.meshes.forEach((mesh) => {
-          if (!mesh.metadata?.cognitiveNode) return;
-          const kind = String(mesh.metadata.kind ?? "");
-          const active = participatesInPhase(kind, currentPhase);
-          const amplitude = active ? phaseAmplitude : kind === "self_model" ? 0.04 : 0.012;
-          mesh.scaling.setAll(1 + wave * amplitude);
+          if (mesh.metadata?.cognitiveNode) {
+            const kind = String(mesh.metadata.kind ?? "");
+            const active = participatesInPhase(kind, currentPhase);
+            const amplitude = active ? phaseAmplitude : kind === "self_model" ? 0.04 : 0.012;
+            mesh.scaling.setAll(1 + wave * amplitude);
+            return;
+          }
+
+          if (mesh.metadata?.cognitiveEdge && mesh instanceof LinesMesh) {
+            const fromKind = String(mesh.metadata.fromKind ?? "");
+            const toKind = String(mesh.metadata.toKind ?? "");
+            const active =
+              participatesInPhase(fromKind, currentPhase) ||
+              participatesInPhase(toKind, currentPhase);
+            const historical = Boolean(mesh.metadata.historical);
+            const baseAlpha = Number(mesh.metadata.baseAlpha ?? 0.16);
+            mesh.alpha = active ? Math.min(1, 0.62 + (wave + 1) * 0.12) : baseAlpha;
+            mesh.color = active
+              ? phaseEnergy(currentPhase)
+              : historical
+                ? new Color3(0.28, 0.34, 0.44)
+                : new Color3(0.16, 0.46, 0.84);
+            return;
+          }
+
+          if (mesh.metadata?.cognitiveTracer) {
+            const fromKind = String(mesh.metadata.fromKind ?? "");
+            const toKind = String(mesh.metadata.toKind ?? "");
+            const active =
+              participatesInPhase(fromKind, currentPhase) ||
+              participatesInPhase(toKind, currentPhase);
+            mesh.isVisible = active;
+            if (!active) return;
+
+            const from = mesh.metadata.from as Vector3;
+            const to = mesh.metadata.to as Vector3;
+            const offset = Number(mesh.metadata.offset ?? 0);
+            const progress = (time * 0.48 + offset) % 1;
+            Vector3.LerpToRef(from, to, progress, mesh.position);
+            mesh.scaling.setAll(0.8 + (wave + 1) * 0.16);
+          }
         });
       });
 
