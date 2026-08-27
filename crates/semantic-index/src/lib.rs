@@ -2,8 +2,7 @@ use std::sync::Arc;
 
 use arrow_array::{
     Array, FixedSizeListArray, Float32Array, Float64Array, Int64Array, RecordBatch,
-    RecordBatchIterator, StringArray,
-    types::Float32Type,
+    RecordBatchIterator, StringArray, types::Float32Type,
 };
 use arrow_schema::{DataType, Field, Schema, SchemaRef};
 use futures::TryStreamExt;
@@ -201,7 +200,9 @@ fn document_batch(
     dimension: usize,
 ) -> Result<RecordBatch> {
     let vector = FixedSizeListArray::from_iter_primitive::<Float32Type, _, _>(
-        [Some(document.vector.into_iter().map(Some).collect::<Vec<_>>())],
+        [Some(
+            document.vector.into_iter().map(Some).collect::<Vec<_>>(),
+        )],
         dimension as i32,
     );
 
