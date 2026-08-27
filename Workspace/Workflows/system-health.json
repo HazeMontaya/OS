@@ -1,9 +1,0 @@
-{
-  "id": "system-health",
-  "name": "System Health",
-  "description": "Collects local runtime information without requiring an AI provider.",
-  "steps": [
-    { "id": "system", "type": "tool", "tool": "system.info", "args": {}, "saveAs": "system" },
-    { "id": "root", "type": "tool", "tool": "fs.list", "args": { "path": "." }, "saveAs": "root" }
-  ]
-}

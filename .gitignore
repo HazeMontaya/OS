@@ -1,22 +1,54 @@
-# OS - Git Ignore
-# Ziel: Alle OS-Projektdateien versionieren. Nur lokale Secrets bleiben ausgeschlossen.
-
-# Secrets / lokale Zugangsdaten
+# secrets
 .env
-.env.local
-.env.*.local
-Docs/FREE-API-KEYS.md
-credentials.json
-secrets.json
+.env.*
+!.env.example
 *.pem
+*.key
 *.p12
 *.pfx
-*.key
-Data/Obsidian/Network/Cookies
-Data/Obsidian/Network/Cookies-journal
-Data/Obsidian/Network/Trust Tokens
-Data/Obsidian/Network/Trust Tokens-journal
-Data/Obsidian/Local State
-Data/Obsidian/Local Storage/
-Data/Obsidian/Session Storage/
-Data/Obsidian/IndexedDB/
+
+# JS
+node_modules/
+dist/
+.pnpm-store/
+
+# Rust
+/target/
+**/target/
+
+# Tauri generated bundles
+**/src-tauri/gen/
+
+# IDE / OS
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db
+
+# runtime data: never commit user cognition or credentials
+Data/
+data/
+Runtime/
+runtime/
+Logs/
+logs/
+*.log
+
+# models / generated artifacts
+Models/
+models/
+*.gguf
+*.onnx
+*.safetensors
+
+# local databases / vectors
+*.db
+*.db-shm
+*.db-wal
+*.sqlite
+*.sqlite3
+*.lance/
+
+# test and coverage output
+coverage/
+playwright-report/

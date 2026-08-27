@@ -1,0 +1,13 @@
+[package]
+name = "os-kernel"
+version.workspace = true
+edition.workspace = true
+publish = false
+
+[dependencies]
+os-contracts = { path = "../contracts" }
+os-event-ledger = { path = "../event-ledger" }
+os-memory = { path = "../memory" }
+os-knowledge-graph = { path = "../knowledge-graph" }
+serde_json.workspace = true
+uuid.workspace = true

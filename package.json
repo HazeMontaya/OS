@@ -1,13 +1,11 @@
 {
-  "name": "haze-os",
-  "version": "1.0.0",
+  "name": "os-cognitive-environment",
   "private": true,
-  "description": "Local-first AI desktop operating environment",
-  "engines": { "node": ">=22" },
+  "version": "0.1.0",
   "scripts": {
-    "start": "npm --prefix Core/Runtime start",
-    "test": "npm --prefix Core/Runtime test && npm --prefix Core/Desktop test",
-    "test:runtime": "npm --prefix Core/Runtime test",
-    "test:desktop": "npm --prefix Core/Desktop test"
+    "dev": "pnpm --filter @os/desktop tauri dev",
+    "build": "pnpm --filter @os/desktop tauri build",
+    "typecheck": "pnpm --filter @os/desktop typecheck",
+    "check": "cargo check --workspace && pnpm typecheck"
   }
 }

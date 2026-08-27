@@ -1,0 +1,18 @@
+[package]
+name = "os-desktop"
+version.workspace = true
+edition.workspace = true
+publish = false
+
+[lib]
+name = "os_desktop_lib"
+crate-type = ["staticlib", "cdylib", "rlib"]
+
+[build-dependencies]
+tauri-build = { version = "2", features = [] }
+
+[dependencies]
+tauri = { version = "2", features = [] }
+serde.workspace = true
+os-contracts = { path = "../../../crates/contracts" }
+os-kernel = { path = "../../../crates/kernel" }

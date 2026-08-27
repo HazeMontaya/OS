@@ -1,4 +1,0 @@
-{
-  "servers": [],
-  "note": "Register MCP servers here. Runtime exposes registry status via /api/mcp; secrets belong in environment variables, never in Git."
-}

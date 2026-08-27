@@ -1,40 +1,52 @@
-# OS
+# OS — Local-First Cognitive Operating Environment
 
-Local-first AI desktop operating environment for Windows. OS combines a secure Electron shell, a modular Node.js runtime, provider routing, tools, memory, workflows, automations, MCP integrations, audit logging and a visual control plane.
+OS is a greenfield cognitive desktop platform: local-first, model-independent, observable and designed around a living temporal knowledge graph.
 
-## Architecture
+## Product thesis
 
-- `Core/Desktop` — hardened Electron shell
-- `Core/Runtime` — kernel, policy, audit, providers, agents, tools, memory, workflows, automations and MCP
-- `Core/UI` — responsive AI control plane
-- `Config/OS` — runtime policy and model catalog
-- `Workspace` — user-defined agents, workflows, automations, MCP and skills
-- `AI-Brain` — operating knowledge and system instructions
-- `Data` — local runtime state
-- `Models` — local model assets
-- `Logs` — local logs
+OS does not treat chat as the primary interface. Knowledge, memory, agents, tools, model activity and system state are first-class objects in a navigable Cognitive Void.
 
-## Run from source
+## Core loop
 
-Requirements: Node.js 22+.
+`Observe → Understand → Remember → Connect → Reason → Act → Evaluate → Learn → Reorganize`
+
+## Stack
+
+- Rust kernel
+- Tauri 2 desktop shell
+- React 19 + TypeScript
+- Babylon.js 9 cognitive visualization
+- SQLite/FTS5 as canonical persistence target
+- Embedded vector retrieval target
+- Temporal knowledge graph
+- Capability-based agent/tool runtime
+- Local and optional cloud model gateway
+
+## Repository layout
+
+- `apps/desktop` — commercial desktop client and Cognitive Void
+- `crates/kernel` — privileged cognitive kernel
+- `crates/event-ledger` — append-oriented event foundation
+- `crates/memory` — memory compilation and lifecycle
+- `crates/knowledge-graph` — temporal graph foundation
+- `crates/contracts` — typed IPC/domain contracts
+- `docs` — product, architecture, security and roadmap
+
+## Start
+
+Prerequisites: current stable Rust, Node.js, pnpm, Tauri platform prerequisites.
 
 ```bash
-npm test
-npm start
+pnpm install
+pnpm dev
 ```
 
-Open `http://127.0.0.1:43110`.
+Rust workspace check:
 
-Provider credentials are read exclusively from environment variables. Copy `.env.example` as a reference; do not commit credentials.
+```bash
+cargo check --workspace
+```
 
-## Security defaults
+## Status
 
-OS binds to loopback only. Electron runs with `contextIsolation`, sandboxing and Node integration disabled. Mutating tools require explicit approval by default. Shell execution is disabled by default and can be enabled only through `Config/OS/runtime.json`.
-
-## Portable Windows build
-
-GitHub Actions assembles a portable `OS-Windows-x64.zip`. The archive contains `OS.exe` plus the OS runtime/config/workspace. No installer is required.
-
-## Documentation
-
-See `Docs/ARCHITECTURE.md`, `Docs/SECURITY.md`, `Docs/DEVELOPMENT.md` and `Docs/ROADMAP.md`.
+This repository was intentionally reset to a clean commercial-grade architecture on 2026-08-27. Previous implementation history is preserved on `legacy-before-greenfield-2026-08-27`.

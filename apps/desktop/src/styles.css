@@ -1,0 +1,32 @@
+:root {
+  font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  color: #eef6ff;
+  background: #02040a;
+  font-synthesis: none;
+  text-rendering: geometricPrecision;
+}
+
+* { box-sizing: border-box; }
+html, body, #root { width: 100%; height: 100%; margin: 0; overflow: hidden; }
+button, input { font: inherit; }
+
+.shell { position: relative; width: 100%; height: 100%; background: radial-gradient(circle at 50% 38%, #0a1830 0%, #02040a 48%, #010205 100%); }
+.void-canvas { position: absolute; inset: 0; width: 100%; height: 100%; outline: none; }
+.glass { background: linear-gradient(180deg, rgba(15, 25, 42, .62), rgba(5, 10, 18, .54)); border: 1px solid rgba(160, 205, 255, .13); box-shadow: 0 18px 60px rgba(0,0,0,.28), inset 0 1px 0 rgba(255,255,255,.04); backdrop-filter: blur(22px) saturate(130%); }
+.topbar { position: absolute; top: 22px; left: 28px; right: 28px; height: 54px; display: flex; align-items: center; justify-content: space-between; padding: 0 18px; border-radius: 16px; letter-spacing: .08em; font-size: 12px; }
+.topbar > div { display: flex; gap: 12px; align-items: center; }
+.brand-mark { width: 9px; height: 9px; border-radius: 50%; background: #b9e8ff; box-shadow: 0 0 18px #5fc7ff; }
+.muted { color: rgba(221, 235, 255, .42); font-weight: 500; text-transform: uppercase; }
+.telemetry { color: rgba(211, 231, 255, .54); font-size: 10px; }
+.online { color: #98ffd6; }
+.offline { color: #ffd28e; }
+.focus-copy { position: absolute; left: 50%; top: 43%; width: min(680px, 80vw); transform: translate(-50%, -50%); text-align: center; pointer-events: none; text-shadow: 0 2px 28px rgba(0,0,0,.8); }
+.eyebrow { color: #84caff; font-size: 10px; letter-spacing: .34em; font-weight: 800; }
+.focus-copy h1 { margin: 10px 0 12px; font-size: clamp(36px, 5vw, 74px); line-height: .96; letter-spacing: -.055em; font-weight: 580; }
+.focus-copy > p:last-child { max-width: 590px; margin: 0 auto; color: rgba(220, 235, 255, .58); line-height: 1.65; font-size: 14px; }
+.command { position: absolute; left: 50%; bottom: 28px; width: min(820px, calc(100vw - 56px)); min-height: 62px; transform: translateX(-50%); border-radius: 20px; display: grid; grid-template-columns: 34px 1fr auto; align-items: center; padding: 8px 10px 8px 18px; }
+.command input { min-width: 0; border: 0; outline: 0; background: transparent; color: #eff8ff; font-size: 15px; }
+.command input::placeholder { color: rgba(210, 228, 248, .32); }
+.prompt { color: #83d5ff; font-size: 24px; }
+.command button { border: 1px solid rgba(144, 205, 255, .18); background: rgba(115, 190, 255, .08); color: rgba(222, 242, 255, .72); border-radius: 12px; padding: 11px 14px; font-size: 9px; letter-spacing: .16em; cursor: pointer; }
+.command button:hover { background: rgba(115, 190, 255, .15); color: white; }
