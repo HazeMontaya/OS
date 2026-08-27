@@ -3,11 +3,20 @@ use std::{env, fmt::Write, sync::Mutex};
 use os_contracts::{AskResult, ContextPack, GraphSnapshot, SystemSnapshot};
 use os_kernel::Kernel;
 use os_model_gateway::{ChatMessage, LlamaCppClient, LlamaCppConfig};
-use tauri::Manager;
+use serde::Serialize;
+use tauri::{Emitter, Manager};
 
 struct AppState {
     kernel: Mutex<Kernel>,
     model: LlamaCppClient,
+}
+
+#[derive(Clone, Serialize)]
+struct CognitiveActivity {
+    phase: &'static str,
+    active: bool,
+    success: Option<bool>,
+    component: String,
 }
 
 #[tauri::command]
@@ -39,25 +48,42 @@ fn ingest_event(content: String, state: tauri::State<'_, AppState>) -> Result<()
 }
 
 #[tauri::command]
-async fn ask(content: String, state: tauri::State<'_, AppState>) -> Result<AskResult, String> {
+async fn ask(
+    content: String,
+    app: tauri::AppHandle,
+    state: tauri::State<'_, AppState>,
+) -> Result<AskResult, String> {
     let content = content.trim().to_string();
     if content.is_empty() {
         return Err("empty cognitive turn".into());
     }
 
-    let context = {
+    emit_activity(&app, "memory_recall", true, None, "kernel.context_pack");
+    let context_result = {
         let mut kernel = state
             .kernel
             .lock()
             .map_err(|_| "kernel lock poisoned".to_string())?;
-        let context = kernel
-            .context_pack(&content, 8)
-            .map_err(|error| error.to_string())?;
+        kernel.context_pack(&content, 8)
+    };
+    emit_activity(
+        &app,
+        "memory_recall",
+        false,
+        Some(context_result.is_ok()),
+        "kernel.context_pack",
+    );
+    let context = context_result.map_err(|error| error.to_string())?;
+
+    {
+        let mut kernel = state
+            .kernel
+            .lock()
+            .map_err(|_| "kernel lock poisoned".to_string())?;
         kernel
             .ingest_user_input(content.clone())
             .map_err(|error| error.to_string())?;
-        context
-    };
+    }
 
     let messages = vec![
         ChatMessage::system(
@@ -67,27 +93,68 @@ async fn ask(content: String, state: tauri::State<'_, AppState>) -> Result<AskRe
         ChatMessage::user(content),
     ];
 
-    let completion = state
-        .model
-        .chat(&messages, 1_536, 0.35)
-        .await
+    emit_activity(&app, "model_inference", true, None, "llama.cpp");
+    let completion_result = state.model.chat(&messages, 1_536, 0.35).await;
+    let inference_component = completion_result
+        .as_ref()
+        .map(|completion| completion.model.as_str())
+        .unwrap_or("llama.cpp");
+    emit_activity(
+        &app,
+        "model_inference",
+        false,
+        Some(completion_result.is_ok()),
+        inference_component,
+    );
+    let completion = completion_result
         .map_err(|error| format!("local model unavailable: {error}"))?;
 
-    {
+    emit_activity(
+        &app,
+        "output_persist",
+        true,
+        None,
+        completion.model.clone(),
+    );
+    let output_result = {
         let mut kernel = state
             .kernel
             .lock()
             .map_err(|_| "kernel lock poisoned".to_string())?;
-        kernel
-            .ingest_assistant_output(completion.text.clone(), &completion.model)
-            .map_err(|error| error.to_string())?;
-    }
+        kernel.ingest_assistant_output(completion.text.clone(), &completion.model)
+    };
+    emit_activity(
+        &app,
+        "output_persist",
+        false,
+        Some(output_result.is_ok()),
+        completion.model.clone(),
+    );
+    output_result.map_err(|error| error.to_string())?;
 
     Ok(AskResult {
         text: completion.text,
         model: completion.model,
         context,
     })
+}
+
+fn emit_activity(
+    app: &tauri::AppHandle,
+    phase: &'static str,
+    active: bool,
+    success: Option<bool>,
+    component: impl Into<String>,
+) {
+    let _ = app.emit(
+        "cognitive-activity",
+        CognitiveActivity {
+            phase,
+            active,
+            success,
+            component: component.into(),
+        },
+    );
 }
 
 fn render_context_pack(context: &ContextPack) -> String {
