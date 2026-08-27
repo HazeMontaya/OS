@@ -4,8 +4,8 @@ use std::{
 };
 
 use os_contracts::{
-    CognitiveEdge, CognitiveEvent, CognitiveNode, EntityRecord, GraphSnapshot, MemoryKind,
-    RelationshipRecord, SystemSnapshot,
+    CognitiveEdge, CognitiveEvent, CognitiveNode, ContextItem, ContextPack, EntityRecord,
+    GraphSnapshot, MemoryKind, RelationshipRecord, SystemSnapshot,
 };
 use os_event_ledger::EventLedger;
 use os_knowledge_graph::KnowledgeGraph;
@@ -232,6 +232,52 @@ impl Kernel {
         Ok(())
     }
 
+    pub fn context_pack(&mut self, query: &str, limit: usize) -> Result<ContextPack, KernelError> {
+        let query = query.trim();
+        if query.is_empty() || limit == 0 {
+            return Ok(ContextPack {
+                query: query.to_string(),
+                items: Vec::new(),
+            });
+        }
+
+        let mut trace = TraceSignal::start(
+            Uuid::new_v4().to_string(),
+            SignalKind::MemoryRecall,
+            "kernel.context_pack",
+        );
+        let hits = self
+            .retrieval
+            .lexical_memory_recall(&self.storage, query, limit)?;
+        let mut items = Vec::with_capacity(hits.len());
+
+        for hit in hits {
+            let Some(memory) = self.memory.all().iter().find(|memory| memory.id == hit.id) else {
+                continue;
+            };
+            if memory.text.starts_with("[protected secret reference:") {
+                continue;
+            }
+
+            self.storage.record_memory_retrieval(&memory.id, false)?;
+            items.push(ContextItem {
+                id: memory.id.clone(),
+                text: memory.text.clone(),
+                kind: memory.kind.clone(),
+                score: hit.score,
+                confidence: memory.confidence,
+                provenance: memory.provenance.clone(),
+            });
+        }
+
+        trace.complete(true);
+        self.telemetry.record(trace);
+        Ok(ContextPack {
+            query: query.to_string(),
+            items,
+        })
+    }
+
     pub fn recall(&mut self, query: &str, limit: usize) -> Result<Vec<RecallHit>, KernelError> {
         let mut trace = TraceSignal::start(
             Uuid::new_v4().to_string(),
@@ -348,6 +394,18 @@ mod tests {
         assert_eq!(kernel.telemetry_count(), 1);
         assert_eq!(kernel.graph_snapshot().nodes.len(), 3);
         assert_eq!(kernel.graph_snapshot().edges.len(), 1);
+    }
+
+    #[test]
+    fn context_pack_contains_memory_text_and_provenance() {
+        let mut kernel = Kernel::in_memory().expect("create kernel");
+        kernel
+            .ingest_user_input("OS uses a temporal knowledge graph with provenance".into())
+            .expect("ingest context");
+        let pack = kernel.context_pack("temporal provenance", 5).expect("context pack");
+        assert_eq!(pack.items.len(), 1);
+        assert!(pack.items[0].text.contains("temporal knowledge graph"));
+        assert_eq!(pack.items[0].provenance.len(), 1);
     }
 
     #[test]
