@@ -55,11 +55,7 @@ async fn ingest_event(content: String, state: tauri::State<'_, AppState>) -> Res
         .map_err(|_| "kernel lock poisoned".to_string())?
         .ingest_user_input(content)
         .map_err(|error| error.to_string())?;
-    schedule_projection_index(
-        projection,
-        state.embedding.clone(),
-        state.semantic.clone(),
-    );
+    schedule_projection_index(projection, state.embedding.clone(), state.semantic.clone());
     Ok(())
 }
 
@@ -74,13 +70,7 @@ async fn ask(
         return Err("empty cognitive turn".into());
     }
 
-    emit_activity(
-        &app,
-        "memory_recall",
-        true,
-        None,
-        "hybrid:fts5+lancedb",
-    );
+    emit_activity(&app, "memory_recall", true, None, "hybrid:fts5+lancedb");
     let lexical = {
         let kernel = state
             .kernel
