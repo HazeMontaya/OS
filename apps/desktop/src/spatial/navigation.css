@@ -7,6 +7,16 @@
   align-items: stretch;
   gap: 7px;
   pointer-events: none;
+  opacity: 0.72;
+  transform: translateZ(0);
+  transition: opacity 180ms ease, filter 180ms ease;
+}
+
+.spatial-navigator:hover,
+.spatial-navigator:focus-within,
+.spatial-navigator.node-selected {
+  opacity: 1;
+  filter: drop-shadow(0 16px 28px rgba(0, 0, 0, 0.22));
 }
 
 .spatial-navigator > * { pointer-events: auto; }
@@ -35,6 +45,23 @@
   gap: 3px;
   padding: 7px 12px;
   border-radius: 10px;
+}
+
+.spatial-level {
+  min-width: 92px;
+}
+
+.spatial-cluster {
+  min-width: 150px;
+  max-width: 184px;
+  overflow: hidden;
+  transition: max-width 220ms ease, border-color 180ms ease, background 180ms ease;
+}
+
+.spatial-navigator:hover .spatial-cluster,
+.spatial-navigator:focus-within .spatial-cluster,
+.spatial-navigator.node-selected .spatial-cluster {
+  max-width: 460px;
 }
 
 .spatial-level::before,
@@ -81,6 +108,23 @@
   letter-spacing: 0.055em;
 }
 
+.spatial-cluster small {
+  max-width: 0;
+  opacity: 0;
+  overflow: hidden;
+  white-space: nowrap;
+  transform: translateY(-2px);
+  transition: max-width 220ms ease, opacity 160ms ease, transform 180ms ease;
+}
+
+.spatial-navigator:hover .spatial-cluster small,
+.spatial-navigator:focus-within .spatial-cluster small,
+.spatial-navigator.node-selected .spatial-cluster small {
+  max-width: 430px;
+  opacity: 0.76;
+  transform: translateY(0);
+}
+
 .camera-mode-strip {
   position: relative;
   display: grid;
@@ -91,6 +135,14 @@
   padding: 4px;
   border-radius: 10px;
   overflow: hidden;
+  opacity: 0.78;
+  transition: opacity 160ms ease, border-color 160ms ease;
+}
+
+.spatial-navigator:hover .camera-mode-strip,
+.spatial-navigator:focus-within .camera-mode-strip,
+.spatial-navigator.node-selected .camera-mode-strip {
+  opacity: 1;
 }
 
 .camera-mode-strip::after {
@@ -146,10 +198,12 @@
   transition: width 160ms ease, opacity 160ms ease;
 }
 
-.camera-mode-strip button:hover {
+.camera-mode-strip button:hover,
+.camera-mode-strip button:focus-visible {
   color: var(--os-gold-soft);
   border-color: color-mix(in srgb, var(--os-gold) 20%, transparent);
   background: color-mix(in srgb, var(--os-gold) 5%, transparent);
+  outline: none;
 }
 
 .camera-mode-strip button.active {
@@ -177,11 +231,13 @@
   letter-spacing: 0.15em;
 }
 
-.spatial-navigator > button:hover {
+.spatial-navigator > button:hover,
+.spatial-navigator > button:focus-visible {
   color: var(--os-gold-soft);
   border-color: color-mix(in srgb, var(--os-gold-bright) 34%, transparent);
   background: color-mix(in srgb, var(--os-gold) 8%, var(--os-canvas));
   box-shadow: 0 0 24px color-mix(in srgb, var(--os-gold) 8%, transparent);
+  outline: none;
 }
 
 .spatial-overview-button {
@@ -200,6 +256,12 @@
   padding: 11px 14px 12px 17px;
   border-radius: 10px;
   pointer-events: none;
+  animation: spatial-readout-in 130ms ease-out both;
+}
+
+@keyframes spatial-readout-in {
+  from { opacity: 0; transform: translateY(5px) scale(0.99); }
+  to { opacity: 1; transform: translateY(0) scale(1); }
 }
 
 .spatial-hover-readout::before {
@@ -218,6 +280,15 @@
 }
 
 .spatial-navigator.node-selected { left: 390px; }
+
+.reduced-motion .spatial-navigator,
+.reduced-motion .spatial-cluster,
+.reduced-motion .spatial-cluster small,
+.reduced-motion .camera-mode-strip,
+.reduced-motion .spatial-hover-readout {
+  transition: none;
+  animation: none;
+}
 
 @media (max-width: 1440px) {
   .camera-mode-strip {
@@ -246,6 +317,7 @@
     top: 82px;
     bottom: auto;
     max-width: calc(100vw - 28px);
+    opacity: 0.92;
   }
   .spatial-hover-readout {
     left: 14px;
@@ -254,6 +326,9 @@
   .camera-mode-strip {
     overflow-x: auto;
     grid-template-columns: repeat(6, 34px);
+  }
+  .spatial-cluster {
+    max-width: 150px;
   }
 }
 
