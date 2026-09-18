@@ -35,3 +35,16 @@ impl RevenueProject {
 
     pub fn stop(&mut self) { self.stage = RevenueStage::Stopped; }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    #[test]
+    fn lifecycle_advances() {
+        let o=Opportunity{id:"1".into(),name:"test".into(),hypothesis:"x".into(),expected_revenue_cents:1000,expected_cost_cents:100,confidence_bps:9000};
+        let mut p=RevenueProject::new(o);
+        assert_eq!(p.advance().unwrap(),RevenueStage::Validating);
+    }
+}
+
+}
