@@ -19,11 +19,13 @@ if (-not (Test-Path ".\target\debug\os-dashboard.exe") -or -not (Test-Path ".\ta
     cargo build -p os-dashboard -p os-cli
 }
 
-$dashboardLog = Join-Path (Resolve-Path ".os/logs") "dashboard.log"
-$runtimeLog = Join-Path (Resolve-Path ".os/logs") "runtime.log"
+$dashboardOut = Join-Path (Resolve-Path ".os/logs") "dashboard.out.log"
+$dashboardErr = Join-Path (Resolve-Path ".os/logs") "dashboard.err.log"
+$runtimeOut = Join-Path (Resolve-Path ".os/logs") "runtime.out.log"
+$runtimeErr = Join-Path (Resolve-Path ".os/logs") "runtime.err.log"
 
-$dashboard = Start-Process -FilePath ".\target\debug\os-dashboard.exe" -RedirectStandardOutput $dashboardLog -RedirectStandardError $dashboardLog -PassThru -WindowStyle Hidden
-$runtime = Start-Process -FilePath ".\target\debug\os-cli.exe" -RedirectStandardOutput $runtimeLog -RedirectStandardError $runtimeLog -PassThru -WindowStyle Hidden
+$dashboard = Start-Process -FilePath ".\target\debug\os-dashboard.exe" -RedirectStandardOutput $dashboardOut -RedirectStandardError $dashboardErr -PassThru -WindowStyle Hidden
+$runtime = Start-Process -FilePath ".\target\debug\os-cli.exe" -RedirectStandardOutput $runtimeOut -RedirectStandardError $runtimeErr -PassThru -WindowStyle Hidden
 
 Set-Content -Path ".os\dashboard.pid" -Value $dashboard.Id
 Set-Content -Path ".os\runtime.pid" -Value $runtime.Id
