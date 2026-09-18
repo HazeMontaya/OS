@@ -7,6 +7,7 @@ use os_governance::DecisionClass;
 use os_revenue::{Opportunity,RevenueProject};
 use os_survival::SurvivalDecision;
 use os_planner::{Planner,PlannerInput,RulePlanner};
+use os_model::EnvModelConfig;
 use std::path::PathBuf;
 use std::sync::atomic::{AtomicBool,Ordering};
 use std::time::Duration;
@@ -17,14 +18,14 @@ use std::time::Duration;
 #[derive(Clone,Debug)] pub struct QueuedTask{pub agent:String,pub class:DecisionClass,pub cost:i64,pub tool:ToolRequest,pub approval:bool}
 pub struct Runtime{
  pub agents:Vec<Agent>,pub treasury:Treasury,pub opportunities:Vec<RevenueProject>,pub changes:Vec<ChangeProposal>,
- pub execution:ExecutionEngine,pub planner:RulePlanner,pub pending_tasks:Vec<QueuedTask>,pub events:EventLog,pub memory:Memory,pub context:ExecutionContext,thresholds:SurvivalThresholds,next_task:u64
+ pub execution:ExecutionEngine,pub model:EnvModelConfig,pub planner:RulePlanner,pub pending_tasks:Vec<QueuedTask>,pub events:EventLog,pub memory:Memory,pub context:ExecutionContext,thresholds:SurvivalThresholds,next_task:u64
 }
 impl Runtime{
  pub fn new(initial_balance_cents:i64)->Self{
   let roles=["Governor","Research","Business","Engineering","Content","Finance","Operations","QA","Security"];
   let agents=roles.iter().enumerate().map(|(i,r)|Agent{id:format!("agent-{:02}",i+1),role:(*r).into()}).collect();
   let mut treasury=Treasury::new(initial_balance_cents);treasury.set_burn_rate(100);
-  Self{agents,treasury,opportunities:vec![],changes:vec![],execution:ExecutionEngine::default(),planner:RulePlanner::default(),pending_tasks:vec![],events:EventLog::default(),memory:Memory::default(),
+  Self{agents,treasury,opportunities:vec![],changes:vec![],execution:ExecutionEngine::default(),model:EnvModelConfig::from_env(),planner:RulePlanner::default(),pending_tasks:vec![],events:EventLog::default(),memory:Memory::default(),
    context:ExecutionContext{workspace_root:PathBuf::from("."),allowed_commands:vec!["cargo".into(),"rustc".into(),"git".into()]},
    thresholds:SurvivalThresholds{explore_days:30,operate_days:14,optimize_days:7,emergency_days:2},next_task:1}
  }
