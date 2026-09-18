@@ -1,5 +1,6 @@
 use std::{fs, path::{Path, PathBuf}, process::Command, time::{Duration,Instant}, thread};
 use os_economy::{EconomicMode, Treasury};
+use os_capabilities::CapabilityRegistry;
 use os_governance::{Decision, DecisionClass, GovernancePolicy};
 use os_survival::SurvivalDecision;
 
@@ -34,11 +35,12 @@ pub struct ExecutionResult {
     pub task_id: String, pub decision: Decision, pub status: TaskStatus,
     pub message: String, pub output: Option<ToolOutput>,
 }
-pub struct ExecutionEngine { pub governance: GovernancePolicy }
-impl Default for ExecutionEngine { fn default() -> Self { Self { governance: GovernancePolicy::default() } } }
+pub struct ExecutionEngine { pub governance: GovernancePolicy, pub capabilities: CapabilityRegistry }
+impl Default for ExecutionEngine { fn default() -> Self { Self { governance: GovernancePolicy::default(), capabilities: CapabilityRegistry::standard() } } }
 
 impl ExecutionEngine {
     pub fn plan(&self, task:&AgentTask, treasury:&Treasury, mode:EconomicMode, survival:SurvivalDecision, approval:bool)->ExecutionResult {
+        if !self.capabilities.allows(task.tool.name(), task.class) { return Self::blocked(task,Decision::Deny,"capability is not registered for this decision class"); }
         if task.class != DecisionClass::ReadOnly && mode == EconomicMode::Emergency { return Self::blocked(task,Decision::Deny,"emergency mode blocks non-read-only work"); }
         if task.class == DecisionClass::Reversible && task.estimated_cost_cents > survival.max_experiment_cents { return Self::blocked(task,Decision::Deny,"survival experiment budget exceeded"); }
         let decision=self.governance.evaluate(task.class,Some(task.estimated_cost_cents),mode==EconomicMode::Emergency);
