@@ -8,6 +8,7 @@ members = [
   "crates/evolution",
   "crates/execution",
   "crates/events",
+  "crates/memory",
   "crates/runtime",
   "apps/cli",
 ]
