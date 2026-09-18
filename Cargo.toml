@@ -12,6 +12,8 @@ members = [
   "crates/planner",
   "crates/model",
   "crates/capabilities",
+  "crates/commerce",
+  "crates/research",
   "crates/runtime",
   "apps/cli",
   "apps/dashboard",
