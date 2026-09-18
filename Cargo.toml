@@ -15,6 +15,7 @@ members = [
   "crates/commerce",
   "crates/research",
   "crates/orchestration",
+  "crates/system-model",
   "crates/runtime",
   "apps/cli",
   "apps/dashboard",
