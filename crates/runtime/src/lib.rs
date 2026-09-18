@@ -7,7 +7,7 @@ use os_governance::{Decision, DecisionClass};
 use os_revenue::{Opportunity,RevenueProject};
 use os_survival::SurvivalDecision;
 use os_planner::{Planner,PlannerInput,RulePlanner};
-use os_model::EnvModelConfig;
+use os_model::{EnvModelConfig, ModelProvider, ModelRequest, ModelResponse};
 use os_commerce::Commerce;
 use os_research::ResearchPolicy;
 use os_orchestration::{AgentHandoff, DecisionRecord, NodeKind, WorkGraph, WorkItem, WorkspaceRegistry};
@@ -51,6 +51,13 @@ impl Runtime{
  }
  pub fn snapshot(&self)->RuntimeSnapshot{let t=self.treasury.snapshot(self.thresholds);RuntimeSnapshot{agents:self.agents.clone(),survival:os_survival::replan(t.mode),treasury:t,opportunities:self.opportunities.len(),changes:self.changes.len(),events:self.events.len(),queued_tasks:self.pending_tasks.len(),customers:self.commerce.customers.len(),outstanding_invoices_cents:self.commerce.outstanding_cents(),work_items:self.work_items.len(),workspaces:self.workspaces.all().count(),decisions:self.decisions.len(),model_candidates:self.model_router.candidates().len(),system_entities:self.system_model.entities.len(),system_relations:self.system_model.relations.len(),system_evidence:self.system_model.evidence.len()}}
  pub fn route_model(&self, task_kind:&str, min_quota_tokens:usize, max_latency_ms:Option<u32>) -> Result<RoutingDecision,ModelError> { self.model_router.route_for_task(task_kind,min_quota_tokens,max_latency_ms) }
+ pub fn complete_model(&self, task_kind:&str, request:&ModelRequest) -> Result<ModelResponse,ModelError> {
+  let route=self.route_model(task_kind,request.max_tokens,None)?;
+  match route.provider.to_ascii_lowercase().as_str(){
+   "omniroute"|"openai"|"openai-compatible" => { let mut config=self.model.clone(); config.provider=route.provider; config.model=route.model; let provider=os_model::OpenAiCompatibleProvider::from_env(&config)?; provider.complete(request) }
+   other => Err(ModelError::Unavailable(format!("no runtime adapter for selected provider: {other}"))),
+  }
+ }
  pub fn queue_task(&mut self,agent:impl Into<String>,class:DecisionClass,cost:i64,tool:ToolRequest,approval:bool){self.pending_tasks.push(QueuedTask{agent:agent.into(),class,cost:cost.max(0),tool,approval});}
  pub fn execute_next_queued_task(&mut self)->Option<ExecutionResult>{
      let task=self.pending_tasks.first()?.clone();
