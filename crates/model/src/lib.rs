@@ -63,7 +63,7 @@ impl ModelProvider for OpenAiResponsesProvider {
         });
         let response = reqwest::blocking::Client::new()
             .post(&self.endpoint)
-            .bearer_auth(&self.api_key)
+            .bearer_auth_if_present(&self.api_key)
             .json(&body)
             .send()
             .map_err(|e| ModelError::Unavailable(e.to_string()))?;
@@ -194,9 +194,24 @@ impl OpenAiCompatibleProvider {
                 "OPENAI_API_KEY".into()
             }
         });
-        let api_key = std::env::var(&env_name)
-            .map_err(|_| ModelError::Unavailable(format!("missing API key environment variable: {env_name}")))?;
+        let api_key = std::env::var(&env_name).unwrap_or_default();
+        let local_endpoint = endpoint.starts_with("http://127.0.0.1")
+            || endpoint.starts_with("http://localhost")
+            || endpoint.starts_with("http://[::1]");
+        if api_key.is_empty() && !local_endpoint {
+            return Err(ModelError::Unavailable(format!("missing API key environment variable: {env_name}")));
+        }
         Ok(Self { endpoint, api_key, model: config.model.clone() })
+    }
+}
+
+trait BearerAuthExt {
+    fn bearer_auth_if_present(self, api_key: &str) -> Self;
+}
+
+impl BearerAuthExt for reqwest::blocking::RequestBuilder {
+    fn bearer_auth_if_present(self, api_key: &str) -> Self {
+        if api_key.is_empty() { self } else { self.bearer_auth(api_key) }
     }
 }
 
@@ -278,7 +293,7 @@ mod compatible_tests {
         std::env::remove_var("OMNIROUTE_API_KEY");
         let config=EnvModelConfig { provider:"omniroute".into(), model:"demo".into(), endpoint:None, api_key_env:None, metadata:BTreeMap::new() };
         let result=OpenAiCompatibleProvider::from_env(&config);
-        assert!(matches!(result,Err(ModelError::Unavailable(message)) if message.contains("OMNIROUTE_API_KEY")));
+        assert!(result.is_ok());
     }
 }
 
@@ -293,5 +308,24 @@ mod capability_tests {
         r.register(ModelCandidate { provider:"generic".into(), model:"cheap".into(), healthy:true, remaining_quota_tokens:1000, estimated_cost_micros:1, latency_ms:10, capabilities:vec![] });
         r.register(ModelCandidate { provider:"coding".into(), model:"code".into(), healthy:true, remaining_quota_tokens:1000, estimated_cost_micros:5, latency_ms:20, capabilities:vec!["coding".into()] });
         assert_eq!(r.route_for_task("coding",10,None).unwrap().model,"code");
+    }
+}
+
+#[cfg(test)]
+mod local_endpoint_tests {
+    use super::*;
+
+    #[test]
+    fn local_compatible_endpoint_does_not_require_api_key() {
+        std::env::remove_var("OS_MODEL_API_KEY_ENV");
+        std::env::remove_var("OMNIROUTE_API_KEY");
+        let config = EnvModelConfig {
+            provider: "ollama".into(),
+            model: "qwen3".into(),
+            endpoint: Some("http://127.0.0.1:11434/v1/chat/completions".into()),
+            api_key_env: None,
+            metadata: BTreeMap::new(),
+        };
+        assert!(OpenAiCompatibleProvider::from_env(&config).is_ok());
     }
 }
