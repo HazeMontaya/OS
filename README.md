@@ -10,19 +10,37 @@ Autonomous multi-agent runtime with economic controls, governed tool execution, 
 - **Execution:** workspace-scoped file operations and allowlisted command execution.
 - **Memory:** in-process memory with JSONL persistence.
 - **Revenue engine:** opportunity scoring and lifecycle from discovery through measurement.
-- **Autonomous runtime:** bounded `run_cycle()` / `run_cycles()` loop with event and memory instrumentation.
+- **Autonomous runtime:** single cycles, bounded cycle batches, and a continuous stop-controlled loop.
 - **Audit events:** task, tool, heartbeat, revenue and accounting events.
 - **Dashboard:** browser UI showing live runtime state and agent world; the UI can trigger autonomous cycles.
+
+## Continuous operation
+
+The CLI now runs the runtime continuously until a manual stop command is entered:
+
+    cargo run -p os-cli
+
+Then type:
+
+    stop
+
+and press Enter.
+
+The loop checks the stop flag between work cycles and during its short wait interval, so shutdown is cooperative rather than an unconditional process kill.
+
+The runtime itself exposes the reusable API:
+
+    runtime.run_until_stopped(&stop, Duration::from_secs(2));
+
+There is intentionally **no daily build schedule** in the OS runtime. Continuous operation is controlled by the running process and the explicit manual stop signal.
 
 ## Run
 
 Install a current stable Rust toolchain, then:
 
-```bash
-cargo test --workspace
-cargo run -p os-cli
-cargo run -p os-dashboard
-```
+    cargo test --workspace
+    cargo run -p os-cli
+    cargo run -p os-dashboard
 
 Open **http://127.0.0.1:8787** after starting the dashboard.
 
@@ -36,20 +54,18 @@ Revenue accounting is an internal ledger. Recording revenue does not itself move
 
 ## Architecture
 
-```text
-Browser / Dashboard
-        |
-        v
-   Runtime Loop
-        |
-   +----+-------------------------------+
-   |    |        |       |              |
-Memory Events  Economy Governance  Revenue
-                     |
-                     v
-                 Execution
-                     |
-          Files / Allowlisted Commands
-```
+    Browser / Dashboard
+            |
+            v
+       Runtime Loop <----- manual STOP
+            |
+       +----+-------------------------------+
+       |    |        |       |              |
+    Memory Events  Economy Governance  Revenue
+                         |
+                         v
+                     Execution
+                         |
+              Files / Allowlisted Commands
 
 The world layer is a visualization of runtime state. It is not the authority for execution, accounting, governance, or memory.
