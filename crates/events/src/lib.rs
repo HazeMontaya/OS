@@ -6,6 +6,9 @@ pub enum Event {
     ToolCompleted { task_id: String, tool: String, success: bool },
     TaskCompleted { task_id: String },
     TaskBlocked { task_id: String, reason: String },
+    HeartbeatStarted { agent: String },
+    HeartbeatFinished { agent: String, status: String },
+    RevenueStageAdvanced { opportunity_id: String, stage: String },
     RevenueRecorded { cents: i64, memo: String },
     ExpenseRecorded { cents: i64, memo: String },
 }
