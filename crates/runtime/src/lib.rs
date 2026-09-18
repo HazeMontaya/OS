@@ -10,7 +10,7 @@ use os_planner::{Planner,PlannerInput,RulePlanner};
 use os_model::EnvModelConfig;
 use os_commerce::Commerce;
 use os_research::ResearchPolicy;
-use os_orchestration::{AgentWorkspace, DecisionRecord, NodeKind, WorkGraph, WorkItem, WorkspaceRegistry, WorkspaceStatus};
+use os_orchestration::{DecisionRecord, NodeKind, WorkGraph, WorkItem, WorkspaceRegistry};
 use os_model::{ModelCandidate, ModelRouter, RoutingDecision, ModelError};
 use os_system_model::{EntityKind, Evidence, SystemModel, VerificationStatus};
 use std::path::PathBuf;
@@ -57,9 +57,16 @@ impl Runtime{
   let planned=self.execution.plan(&task,&self.treasury,snap.treasury.mode,snap.survival,approval);
   if planned.status==TaskStatus::Queued{
    if let Ok(item)=self.work_graph.start_item(task.id.clone(),task.agent.clone(),format!("tool:{}",task.tool.name()),&task.agent){self.work_items.push(item);}
+   if let Err(reason)=self.workspaces.begin_run(&task.agent) {
+       decision.close("blocked",reason.clone(),"repair or reprovision the agent workspace before retry");
+       self.decisions.push(decision);
+       self.events.push(Event::TaskBlocked{task_id:task.id.clone(),reason});
+       return ExecutionResult{task_id:task.id.clone(),decision:Decision::Deny,status:TaskStatus::Blocked,message:"agent workspace is not executable".into(),output:None};
+   }
    self.events.push(Event::TaskQueued{task_id:task.id.clone(),agent:task.agent.clone()});
    self.events.push(Event::TaskStarted{task_id:task.id.clone()});self.events.push(Event::ToolCalled{task_id:task.id.clone(),tool:task.tool.name().into()});
    let result=self.execution.execute(&task,&self.context,planned);
+   let _=self.workspaces.finish_run(&task.agent);
    if let Some(item)=self.work_items.last_mut(){ self.work_graph.terminal(item,result.status==TaskStatus::Completed); }
    decision.close(if result.status==TaskStatus::Completed {"completed"} else {"failed"},result.message.clone(),if result.status==TaskStatus::Completed {"reuse successful procedure"} else {"inspect failure before retry"});
    self.decisions.push(decision);
