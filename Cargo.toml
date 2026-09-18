@@ -23,6 +23,8 @@ members = [
   "crates/economy",
   "crates/governance",
   "crates/survival",
+  "crates/revenue",
+  "crates/evolution",
   "crates/runtime",
   "crates/kernel",
 ]
