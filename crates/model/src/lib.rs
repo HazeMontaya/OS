@@ -88,6 +88,7 @@ pub struct ModelCandidate {
     pub remaining_quota_tokens: usize,
     pub estimated_cost_micros: u64,
     pub latency_ms: u32,
+    pub capabilities: Vec<String>,
 }
 
 #[derive(Clone, Debug, Eq, PartialEq)]
@@ -134,15 +135,15 @@ mod router_tests {
     #[test]
     fn router_prefers_lower_cost() {
         let mut r = ModelRouter::default();
-        r.register(ModelCandidate { provider: "a".into(), model: "slow".into(), healthy: true, remaining_quota_tokens: 1000, estimated_cost_micros: 20, latency_ms: 100 });
-        r.register(ModelCandidate { provider: "b".into(), model: "cheap".into(), healthy: true, remaining_quota_tokens: 1000, estimated_cost_micros: 10, latency_ms: 100 });
+        r.register(ModelCandidate { provider: "a".into(), model: "slow".into(), healthy: true, remaining_quota_tokens: 1000, estimated_cost_micros: 20, latency_ms: 100, capabilities: vec![] });
+        r.register(ModelCandidate { provider: "b".into(), model: "cheap".into(), healthy: true, remaining_quota_tokens: 1000, estimated_cost_micros: 10, latency_ms: 100, capabilities: vec![] });
         assert_eq!(r.route(10, None).unwrap().provider, "b");
     }
 
     #[test]
     fn router_filters_unhealthy() {
         let mut r = ModelRouter::default();
-        r.register(ModelCandidate { provider: "a".into(), model: "x".into(), healthy: false, remaining_quota_tokens: 1000, estimated_cost_micros: 1, latency_ms: 1 });
+        r.register(ModelCandidate { provider: "a".into(), model: "x".into(), healthy: false, remaining_quota_tokens: 1000, estimated_cost_micros: 1, latency_ms: 1, capabilities: vec![] });
         assert!(r.route(1, None).is_err());
     }
 }
@@ -209,9 +210,19 @@ impl ModelProvider for OpenAiCompatibleProvider {
 
 impl ModelRouter {
     pub fn route_for_task(&self, kind: &str, min_quota_tokens: usize, max_latency_ms: Option<u32>) -> Result<RoutingDecision, ModelError> {
-        let decision=self.route(min_quota_tokens,max_latency_ms)?;
-        let reason=format!("task={kind}; {}",decision.reason);
-        Ok(RoutingDecision { reason, ..decision })
+        let mut available: Vec<&ModelCandidate> = self.candidates.iter()
+            .filter(|c| c.healthy && c.remaining_quota_tokens >= min_quota_tokens)
+            .filter(|c| max_latency_ms.map(|limit| c.latency_ms <= limit).unwrap_or(true))
+            .collect();
+        available.sort_by_key(|c| (
+            if c.capabilities.iter().any(|cap| cap.eq_ignore_ascii_case(kind)) { 0u8 } else { 1u8 },
+            c.estimated_cost_micros,
+            c.latency_ms,
+            &c.provider,
+            &c.model,
+        ));
+        let c=available.first().ok_or_else(||ModelError::Unavailable("no healthy model satisfies routing constraints".into()))?;
+        Ok(RoutingDecision { provider:c.provider.clone(), model:c.model.clone(), reason:format!("task={kind}; capability match first, then cost/latency") })
     }
 }
 
@@ -225,5 +236,19 @@ mod compatible_tests {
         let config=EnvModelConfig { provider:"omniroute".into(), model:"demo".into(), endpoint:None, api_key_env:None, metadata:BTreeMap::new() };
         let result=OpenAiCompatibleProvider::from_env(&config);
         assert!(matches!(result,Err(ModelError::Unavailable(message)) if message.contains("OMNIROUTE_API_KEY")));
+    }
+}
+
+
+#[cfg(test)]
+mod capability_tests {
+    use super::*;
+
+    #[test]
+    fn task_capability_beats_lower_cost_generic_candidate() {
+        let mut r=ModelRouter::default();
+        r.register(ModelCandidate { provider:"generic".into(), model:"cheap".into(), healthy:true, remaining_quota_tokens:1000, estimated_cost_micros:1, latency_ms:10, capabilities:vec![] });
+        r.register(ModelCandidate { provider:"coding".into(), model:"code".into(), healthy:true, remaining_quota_tokens:1000, estimated_cost_micros:5, latency_ms:20, capabilities:vec!["coding".into()] });
+        assert_eq!(r.route_for_task("coding",10,None).unwrap().model,"code");
     }
 }
