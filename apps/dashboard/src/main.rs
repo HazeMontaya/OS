@@ -32,6 +32,7 @@ fn state_json(rt: &Runtime) -> String {
             Event::TaskBlocked { task_id, reason } => format!("task blocked: {task_id} / {reason}"),
             Event::HeartbeatStarted { agent } => format!("heartbeat started: {agent}"),
             Event::HeartbeatFinished { agent, status } => format!("heartbeat finished: {agent} / {status}"),
+            Event::AgentHandoff { work_item_id, from_agent, to_agent } => format!("handoff: {work_item_id} / {from_agent} -> {to_agent}"),
             Event::RevenueStageAdvanced { opportunity_id, stage } => format!("revenue: {opportunity_id} -> {stage}"),
             Event::RevenueRecorded { cents, memo } => format!("revenue: {cents}¢ / {memo}"),
             Event::ExpenseRecorded { cents, memo } => format!("expense: {cents}¢ / {memo}"),
