@@ -5,6 +5,7 @@ on:
 
 env:
   CARGO_INCREMENTAL: 0
+  RUST_BACKTRACE: 1
 
 jobs:
   rust:
@@ -12,9 +13,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - uses: dtolnay/rust-toolchain@stable
-      - continue-on-error: true
-        run: cargo fmt --all -- --check
-      - if: ${{ always() }}
-        run: cargo test --workspace
-      - if: ${{ always() }}
-        run: OS_CI=1 cargo run -p os-cli
+      - run: cargo fmt --all -- --check
+      - run: cargo test --workspace
+      - run: cargo build --workspace
+      - run: OS_CI=1 cargo run -p os-cli
