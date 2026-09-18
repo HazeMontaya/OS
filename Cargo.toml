@@ -9,6 +9,7 @@ members = [
   "crates/execution",
   "crates/events",
   "crates/memory",
+  "crates/planner",
   "crates/runtime",
   "apps/cli",
   "apps/dashboard",
