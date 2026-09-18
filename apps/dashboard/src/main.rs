@@ -46,6 +46,31 @@ fn state_json(rt: &Runtime) -> String {
         s.survival.max_experiment_cents, s.opportunities, s.changes, s.events, agents_json(rt), events
     )
 }
+
+fn workflow_json(rt: &Runtime) -> String {
+    let nodes = rt.work_graph.nodes.values().map(|n| format!(
+        "{{"id":"{}","label":"{}","kind":"{:?}","agent_id":{},"class":"{:?}"}}",
+        json_escape(&n.id), json_escape(&n.label),
+        n.kind, n.agent_id.as_ref().map(|v| format!(""{}"", json_escape(v))).unwrap_or_else(|| "null".into()),
+        n.class
+    )).collect::<Vec<_>>().join(",");
+    let edges = rt.work_graph.edges.iter().map(|e| format!(
+        "{{"from":"{}","to":"{}","max_hops":{}}}",
+        json_escape(&e.from), json_escape(&e.to), e.max_hops
+    )).collect::<Vec<_>>().join(",");
+    format!("{{"nodes":[{}],"edges":[{}],"work_items":{},"workspaces":{},"decisions":{}}}",
+        nodes, edges, rt.work_items.len(), rt.workspaces.all().count(), rt.decisions.len())
+}
+
+fn models_json(rt: &Runtime) -> String {
+    let models = rt.model_router.candidates().iter().map(|c| format!(
+        "{{"provider":"{}","model":"{}","healthy":{},"quota_tokens":{},"cost_micros":{},"latency_ms":{}}}",
+        json_escape(&c.provider), json_escape(&c.model), c.healthy, c.remaining_quota_tokens,
+        c.estimated_cost_micros, c.latency_ms
+    )).collect::<Vec<_>>().join(",");
+    format!("[{}]", models)
+}
+
 fn handle(mut stream: TcpStream, rt: &mut Runtime, index: &str) {
     let mut buf = [0u8; 8192];
     let n = stream.read(&mut buf).unwrap_or(0);
@@ -57,6 +82,8 @@ fn handle(mut stream: TcpStream, rt: &mut Runtime, index: &str) {
     match (method, path) {
         ("GET", "/api/state") => response(&mut stream, "200 OK", "application/json", &state_json(rt)),
         ("GET", "/api/agents") => response(&mut stream, "200 OK", "application/json", &format!("[{}]", agents_json(rt))),
+        ("GET", "/api/workflow") => response(&mut stream, "200 OK", "application/json", &workflow_json(rt)),
+        ("GET", "/api/models") => response(&mut stream, "200 OK", "application/json", &models_json(rt)),
         ("GET", "/api/health") => response(&mut stream, "200 OK", "application/json", "{\"ok\":true}"),
         ("POST", "/api/tick") => {
             let cycle = rt.run_cycle();
