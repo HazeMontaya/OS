@@ -4,7 +4,9 @@ use std::io::{Read, Write};
 use std::net::{TcpListener, TcpStream};
 
 fn json_escape(s: &str) -> String {
-    s.replace('\\', "\\\\").replace('"', "\\\"").replace('\n', "\\n").replace('\r', "\\r")
+    s.replace('\\', "\\\\").replace('"', "\\\"").replace('
+', "\
+").replace('\r', "\\r")
 }
 fn state_json(rt: &Runtime) -> String {
     let s = rt.snapshot();
@@ -29,9 +31,15 @@ fn state_json(rt: &Runtime) -> String {
         s.opportunities,s.changes,s.events,agents,events.iter().map(|x|format!(r#""{}""#,x)).collect::<Vec<_>>().join(","))
 }
 fn response(stream:&mut TcpStream,status:&str,content_type:&str,body:&str){
-    let h=format!("HTTP/1.1 {status}\r\nContent-Type: {content_type}\r\nContent-Length: {}\r\nConnection: close\r\n\r\n",body.as_bytes().len());
+    let h=format!("HTTP/1.1 {status}\r
+Content-Type: {content_type}\r
+Content-Length: {}\r
+Connection: close\r
+\r
+",body.as_bytes().len());
     let _=stream.write_all(h.as_bytes()); let _=stream.write_all(body.as_bytes());
 }
+fn agents_json(rt:&Runtime)->String{rt.snapshot().agents.iter().map(|a|format!(r#"{{"id":"{}","role":"{}"}}"#,json_escape(&a.id),json_escape(&a.role))).collect::<Vec<_>>().join(",")}
 fn handle(mut stream:TcpStream,rt:&mut Runtime,index:&str){
     let mut buf=[0u8;8192]; let n=stream.read(&mut buf).unwrap_or(0);
     let req=String::from_utf8_lossy(&buf[..n]);
@@ -40,6 +48,8 @@ fn handle(mut stream:TcpStream,rt:&mut Runtime,index:&str){
     match (first.starts_with("POST /api/tick"),path) {
         (true,_)=>{let cycle=rt.run_cycle();let body=format!(r#"{{"success":{},"kind":"{}","agent":"{}","summary":"{}"}}"#,cycle.success,json_escape(&cycle.kind),json_escape(&cycle.agent),json_escape(&cycle.summary));response(&mut stream,"200 OK","application/json",&body)}
         (_, "/api/state")=>response(&mut stream,"200 OK","application/json",&state_json(rt)),
+        (_, "/api/agents")=>response(&mut stream,"200 OK","application/json",&format!("[{}]",agents_json(rt))),
+        (_, "/api/health")=>response(&mut stream,"200 OK","application/json",r#"{"ok":true}"#),
         _=>response(&mut stream,"200 OK","text/html; charset=utf-8",index),
     }
 }
