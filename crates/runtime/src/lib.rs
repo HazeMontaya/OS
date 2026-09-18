@@ -7,6 +7,8 @@ use os_governance::DecisionClass;
 use os_revenue::{Opportunity,RevenueProject};
 use os_survival::SurvivalDecision;
 use std::path::PathBuf;
+use std::sync::atomic::{AtomicBool,Ordering};
+use std::time::Duration;
 
 #[derive(Clone,Debug)] pub struct Agent{pub id:String,pub role:String}
 #[derive(Clone,Debug)] pub struct CycleResult{pub kind:String,pub agent:String,pub summary:String,pub success:bool}
@@ -43,30 +45,24 @@ impl Runtime{
   self.memory.remember(agent, "observation", format!("{:?}: {}", result.status, result.message));
   self.events.push(Event::HeartbeatFinished { agent: agent.into(), status: format!("{:?}", result.status) });
   result
-}
-
-pub fn persist_memory(&self, path: impl AsRef<std::path::Path>) -> std::io::Result<()> {
-  self.memory.append_jsonl(path)
-}
-
-pub fn register_opportunity(&mut self,o:Opportunity){self.opportunities.push(RevenueProject::new(o))}
-
-pub fn next_revenue_project(&self) -> Option<usize> {
+ }
+ pub fn persist_memory(&self, path: impl AsRef<std::path::Path>) -> std::io::Result<()> { self.memory.append_jsonl(path) }
+ pub fn register_opportunity(&mut self,o:Opportunity){self.opportunities.push(RevenueProject::new(o))}
+ pub fn next_revenue_project(&self) -> Option<usize> {
     let mode = self.snapshot().treasury.mode;
     self.opportunities.iter().enumerate()
-        .filter(|(_, p)| p.stage == os_revenue::RevenueStage::Discovered && p.opportunity.actionable(mode))
+        .filter(|(_, p)| p.stage != os_revenue::RevenueStage::Stopped && p.opportunity.actionable(mode))
         .max_by_key(|(_, p)| p.opportunity.expected_value_cents())
         .map(|(i, _)| i)
-}
-
-pub fn advance_best_revenue_project(&mut self) -> Option<os_revenue::RevenueStage> {
+ }
+ pub fn advance_best_revenue_project(&mut self) -> Option<os_revenue::RevenueStage> {
     let index = self.next_revenue_project()?;
     let project = &mut self.opportunities[index];
     let stage = project.advance().ok()?;
     self.memory.remember("agent-03", "revenue", format!("{} advanced to {:?}", project.opportunity.name, stage));
     self.events.push(Event::RevenueStageAdvanced { opportunity_id: project.opportunity.id.clone(), stage: format!("{:?}", stage) });
     Some(stage)
-}
+ }
  pub fn run_cycle(&mut self) -> CycleResult {
   let mode = self.snapshot().treasury.mode;
   self.memory.remember("agent-01", "cycle", format!("autonomous cycle started in {:?}", mode));
@@ -90,12 +86,30 @@ pub fn advance_best_revenue_project(&mut self) -> Option<os_revenue::RevenueStag
       summary: result.output.as_ref().map(|o| o.stdout.trim().to_string()).unwrap_or(result.message.clone()),
       success: result.status == TaskStatus::Completed,
   }
-}
- pub fn run_cycles(&mut self, count: usize) -> Vec<CycleResult> {
-    (0..count).map(|_| self.run_cycle()).collect()
-}
+ }
+ pub fn run_cycles(&mut self, count: usize) -> Vec<CycleResult> {(0..count).map(|_| self.run_cycle()).collect()}
+ pub fn run_until_stopped(&mut self, stop: &AtomicBool, interval: Duration) -> usize {
+     let mut cycles = 0;
+     while !stop.load(Ordering::Relaxed) {
+         let _ = self.run_cycle();
+         cycles += 1;
+         let mut waited = Duration::ZERO;
+         while waited < interval && !stop.load(Ordering::Relaxed) {
+             let slice = (interval - waited).min(Duration::from_millis(250));
+             std::thread::sleep(slice);
+             waited += slice;
+         }
+     }
+     cycles
+ }
  pub fn register_change(&mut self,p:ChangeProposal){self.changes.push(p)}
  pub fn record_revenue(&mut self,cents:i64,memo:impl Into<String>){let memo=memo.into();self.treasury.record_revenue(cents,memo.clone());self.events.push(Event::RevenueRecorded{cents,memo});}
  pub fn record_expense(&mut self,cents:i64,memo:impl Into<String>)->Result<(),&'static str>{let memo=memo.into();let r=self.treasury.record_expense(cents,memo.clone());if r.is_ok(){self.events.push(Event::ExpenseRecorded{cents,memo});}r}
 }
-#[cfg(test)]mod tests{use super::*;#[test]fn boots(){assert_eq!(Runtime::new(100_000).agents.len(),9)}#[test]fn autonomous_cycle_runs(){let mut r=Runtime::new(100_000);let result=r.run_cycle();assert_eq!(result.agent,"agent-02");assert!(r.snapshot().events>0)}#[test]fn readonly_executes_real_tool(){let mut r=Runtime::new(100_000);r.context.workspace_root=std::env::temp_dir();let result=r.submit_task("agent-02",DecisionClass::ReadOnly,0,ToolRequest::ReadFile{path:PathBuf::from("haze-os-runtime-test.txt")},false);assert_eq!(result.status,TaskStatus::Failed);assert!(r.snapshot().events>=4);}}
+#[cfg(test)]mod tests{
+ use super::*;
+ #[test]fn boots(){assert_eq!(Runtime::new(100_000).agents.len(),9)}
+ #[test]fn autonomous_cycle_runs(){let mut r=Runtime::new(100_000);let result=r.run_cycle();assert_eq!(result.agent,"agent-02");assert!(r.snapshot().events>0)}
+ #[test]fn revenue_cycles_through_stages(){let mut r=Runtime::new(100_000);r.register_opportunity(Opportunity{id:"x".into(),name:"x".into(),hypothesis:"h".into(),expected_revenue_cents:100,expected_cost_cents:1,confidence_bps:9000});for _ in 0..6{let result=r.run_cycle();assert_eq!(result.kind,"revenue");}assert_eq!(r.opportunities[0].stage,os_revenue::RevenueStage::Measuring)}
+ #[test]fn readonly_executes_real_tool(){let mut r=Runtime::new(100_000);r.context.workspace_root=std::env::temp_dir();let result=r.submit_task("agent-02",DecisionClass::ReadOnly,0,ToolRequest::ReadFile{path:PathBuf::from("haze-os-runtime-test.txt")},false);assert_eq!(result.status,TaskStatus::Failed);assert!(r.snapshot().events>=4);}
+}
