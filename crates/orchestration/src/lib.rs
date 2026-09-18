@@ -132,6 +132,37 @@ impl WorkGraph {
     }
 }
 
+
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct AgentHandoff {
+    pub id: String,
+    pub work_item_id: String,
+    pub from_agent: String,
+    pub to_agent: String,
+    pub payload_ref: String,
+    pub acknowledged: bool,
+}
+
+impl WorkGraph {
+    pub fn handoff(
+        &self,
+        item: &mut WorkItem,
+        next: &str,
+        handoff_id: impl Into<String>,
+    ) -> Result<AgentHandoff, String> {
+        let from_agent = item.current_node.clone();
+        self.advance(item, next)?;
+        Ok(AgentHandoff {
+            id: handoff_id.into(),
+            work_item_id: item.id.clone(),
+            from_agent,
+            to_agent: next.into(),
+            payload_ref: item.payload_ref.clone(),
+            acknowledged: false,
+        })
+    }
+}
+
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum WorkspaceStatus { Pending, Provisioning, Ready, Running, Sleeping, Recovery, Stopped }
 
@@ -231,7 +262,7 @@ mod tests {
     use super::*;
     fn node(id:&str)->WorkNode{WorkNode{id:id.into(),label:id.into(),agent_id:None,kind:NodeKind::Agent,class:DecisionClass::ReadOnly}}
     #[test] fn graph_blocks_cycles(){let mut g=WorkGraph::default();g.add_node(node("a")).unwrap();g.add_node(node("b")).unwrap();g.connect("a","b",4).unwrap();assert!(g.connect("b","a",4).is_err());}
-    #[test] fn work_item_handoff(){let mut g=WorkGraph::default();g.add_node(node("a")).unwrap();g.add_node(node("b")).unwrap();g.connect("a","b",4).unwrap();let mut w=g.start_item("w1","telegram","payload:1","a").unwrap();g.advance(&mut w,"b").unwrap();assert_eq!(w.hops,1);}
+    #[test] fn work_item_handoff(){let mut g=WorkGraph::default();g.add_node(node("a")).unwrap();g.add_node(node("b")).unwrap();g.connect("a","b",4).unwrap();let mut w=g.start_item("w1","telegram","payload:1","a").unwrap();let h=g.handoff(&mut w,"b","handoff-1").unwrap();assert_eq!(w.hops,1);assert_eq!(h.from_agent,"a");assert_eq!(h.to_agent,"b");}
     #[test] fn workspace_lifecycle(){let mut r=WorkspaceRegistry::default();r.ensure("agent-01",".");r.begin_run("agent-01").unwrap();assert_eq!(r.get("agent-01").unwrap().status,WorkspaceStatus::Running);assert_eq!(r.get("agent-01").unwrap().active_runs,1);r.finish_run("agent-01").unwrap();assert_eq!(r.get("agent-01").unwrap().status,WorkspaceStatus::Ready);}
     #[test] fn decision_closes(){let mut d=DecisionRecord::new("d1","agent-03","hyp","act");d.close("actual","better","keep evidence");assert!(d.actual_outcome.is_some());}
 }
