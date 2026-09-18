@@ -1,12 +1,12 @@
 use std::collections::BTreeMap;
 
-#[derive(Clone, Debug, Eq, PartialEq)]
+#[derive(serde::Serialize, serde::Deserialize, Clone, Debug, Eq, PartialEq)]
 pub enum Trigger {
     IntervalMs { every_ms: u64 },
     Event { prefix: String },
 }
 
-#[derive(Clone, Debug, Eq, PartialEq)]
+#[derive(serde::Serialize, serde::Deserialize, Clone, Debug, Eq, PartialEq)]
 pub struct ScheduledJob {
     pub id: String,
     pub trigger: Trigger,
@@ -17,6 +17,7 @@ pub struct ScheduledJob {
 }
 
 #[derive(Clone, Debug, Default)]
+#[derive(serde::Serialize, serde::Deserialize)]
 pub struct Scheduler {
     jobs: BTreeMap<String, ScheduledJob>,
 }
@@ -69,6 +70,7 @@ impl Scheduler {
         triggered
     }
 
+    pub fn replace_all(&mut self, jobs: Vec<ScheduledJob>) { self.jobs.clear(); for job in jobs { self.jobs.insert(job.id.clone(), job); } }
     pub fn get(&self, id:&str)->Option<&ScheduledJob>{self.jobs.get(id)}
     pub fn all(&self)->impl Iterator<Item=&ScheduledJob>{self.jobs.values()}
 }
