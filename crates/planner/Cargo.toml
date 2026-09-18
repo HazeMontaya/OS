@@ -8,3 +8,4 @@ os-economy = { path = "../economy" }
 os-revenue = { path = "../revenue" }
 os-execution = { path = "../execution" }
 os-governance = { path = "../governance" }
+os-orchestration = { path = "../orchestration" }
