@@ -28,7 +28,7 @@ pub struct Runtime{
 impl Runtime{
  pub fn new(initial_balance_cents:i64)->Self{
   let roles=["Governor","Research","Business","Engineering","Content","Finance","Operations","QA","Security"];
-  let agents=roles.iter().enumerate().map(|(i,r)|Agent{id:format!("agent-{:02}",i+1),role:(*r).into()}).collect();
+  let agents:Vec<Agent>=roles.iter().enumerate().map(|(i,r)|Agent{id:format!("agent-{:02}",i+1),role:(*r).into()}).collect();
   let mut treasury=Treasury::new(initial_balance_cents);treasury.set_burn_rate(100);
   let model=EnvModelConfig::from_env();
   let mut model_router=ModelRouter::default();
@@ -36,6 +36,7 @@ impl Runtime{
   let work_graph=default_work_graph(&agents);
   let mut workspaces=WorkspaceRegistry::default();
   for agent in &agents { workspaces.ensure(&agent.id, format!("workspaces/{}", agent.id)); }
+  let system_model=bootstrap_system_model(&agents);
   Self{agents,treasury,opportunities:vec![],changes:vec![],execution:ExecutionEngine::default(),model,model_router,planner:RulePlanner::default(),commerce:Commerce::default(),research_policy:ResearchPolicy::default(),pending_tasks:vec![],events:EventLog::default(),memory:Memory::default(),
    context:ExecutionContext{workspace_root:PathBuf::from("."),allowed_commands:vec!["cargo".into(),"rustc".into(),"git".into()],command_timeout:Duration::from_secs(30),max_output_bytes:64*1024},
    work_graph,work_items:vec![],workspaces,decisions:vec![],system_model,thresholds:SurvivalThresholds{explore_days:30,operate_days:14,optimize_days:7,emergency_days:2},next_task:1}
