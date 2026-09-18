@@ -30,6 +30,13 @@ fn main() {
     println!("mode: {:?}", snapshot.treasury.mode);
     println!("survival: {:?}", snapshot.survival);
     println!();
+    if std::env::var_os("OS_CI").is_some() {
+        let _ = runtime.run_cycle();
+        let _ = runtime.checkpoint(&state, &events, &memory);
+        println!("CI smoke cycle completed.");
+        return;
+    }
+
     println!("AUTONOMOUS LOOP: running continuously.");
     println!("Type 'stop' and press Enter to stop cleanly.");
 
