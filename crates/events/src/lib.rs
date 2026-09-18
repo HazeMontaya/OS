@@ -167,6 +167,8 @@ fn encode(event: &Event) -> String {
             esc(from_agent),
             esc(to_agent)
         ),
+        Event::ModelRouted { task_kind, provider, model } => format!("ModelRouted\t{}\t{}\t{}", esc(task_kind), esc(provider), esc(model)),
+        Event::ModelFailed { task_kind, provider, model, reason } => format!("ModelFailed\t{}\t{}\t{}\t{}", esc(task_kind), esc(provider), esc(model), esc(reason)),
         Event::RevenueStageAdvanced { opportunity_id, stage } => {
             format!("RevenueStageAdvanced\t{}\t{}", esc(opportunity_id), esc(stage))
         }
