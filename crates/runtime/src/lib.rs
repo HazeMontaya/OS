@@ -26,7 +26,7 @@ impl Runtime{
   let agents=roles.iter().enumerate().map(|(i,r)|Agent{id:format!("agent-{:02}",i+1),role:(*r).into()}).collect();
   let mut treasury=Treasury::new(initial_balance_cents);treasury.set_burn_rate(100);
   Self{agents,treasury,opportunities:vec![],changes:vec![],execution:ExecutionEngine::default(),model:EnvModelConfig::from_env(),planner:RulePlanner::default(),pending_tasks:vec![],events:EventLog::default(),memory:Memory::default(),
-   context:ExecutionContext{workspace_root:PathBuf::from("."),allowed_commands:vec!["cargo".into(),"rustc".into(),"git".into()]},
+   context:ExecutionContext{workspace_root:PathBuf::from("."),allowed_commands:vec!["cargo".into(),"rustc".into(),"git".into()],command_timeout:Duration::from_secs(30),max_output_bytes:64*1024},
    thresholds:SurvivalThresholds{explore_days:30,operate_days:14,optimize_days:7,emergency_days:2},next_task:1}
  }
  pub fn snapshot(&self)->RuntimeSnapshot{let t=self.treasury.snapshot(self.thresholds);RuntimeSnapshot{agents:self.agents.clone(),survival:os_survival::replan(t.mode),treasury:t,opportunities:self.opportunities.len(),changes:self.changes.len(),events:self.events.len(),queued_tasks:self.pending_tasks.len()}}
