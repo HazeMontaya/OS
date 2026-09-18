@@ -6,7 +6,11 @@ use std::thread;
 use std::time::Duration;
 
 fn main() {
-    let mut runtime = Runtime::new(100_000);\n    let state = std::path::PathBuf::from(".os/state.tsv");\n    let events = std::path::PathBuf::from(".os/events.log");\n    let memory = std::path::PathBuf::from(".os/memory.log");\n    if let Err(e) = runtime.load_state(&state) { eprintln!("state recovery warning: {e}"); }
+    let mut runtime = Runtime::new(100_000);
+    let state = std::path::PathBuf::from(".os/state.tsv");
+    let events = std::path::PathBuf::from(".os/events.log");
+    let memory = std::path::PathBuf::from(".os/memory.log");
+    if let Err(e) = runtime.load_state(&state) { eprintln!("state recovery warning: {e}"); }
     if !runtime.opportunities.iter().any(|p| p.opportunity.id == "bootstrap-product") {
         runtime.register_opportunity(Opportunity {
             id: "bootstrap-product".into(),
@@ -48,7 +52,18 @@ fn main() {
         }
     });
 
-    let mut cycles = 0usize;\n    while !stop.load(Ordering::Relaxed) {\n        let _ = runtime.run_cycle();\n        cycles += 1;\n        if let Err(e) = runtime.checkpoint(&state, &events, &memory) { eprintln!("checkpoint warning: {e}"); }\n        let mut waited = Duration::ZERO;\n        while waited < Duration::from_secs(2) && !stop.load(Ordering::Relaxed) {\n            let slice = (Duration::from_secs(2) - waited).min(Duration::from_millis(250));\n            thread::sleep(slice);\n            waited += slice;\n        }\n    }
+    let mut cycles = 0usize;
+    while !stop.load(Ordering::Relaxed) {
+        let _ = runtime.run_cycle();
+        cycles += 1;
+        if let Err(e) = runtime.checkpoint(&state, &events, &memory) { eprintln!("checkpoint warning: {e}"); }
+        let mut waited = Duration::ZERO;
+        while waited < Duration::from_secs(2) && !stop.load(Ordering::Relaxed) {
+            let slice = (Duration::from_secs(2) - waited).min(Duration::from_millis(250));
+            thread::sleep(slice);
+            waited += slice;
+        }
+    }
     println!();
     println!("Stopped after {cycles} autonomous cycles.");
     let final_snapshot = runtime.snapshot();
