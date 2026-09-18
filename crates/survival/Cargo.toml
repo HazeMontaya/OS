@@ -1,0 +1,9 @@
+[package]
+name = "os-survival"
+version.workspace = true
+edition.workspace = true
+publish = false
+
+[dependencies]
+os-economy = { path = "../economy" }
+serde.workspace = true
