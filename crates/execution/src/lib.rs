@@ -1,4 +1,4 @@
-use std::{fs, path::{Path, PathBuf}, process::Command};
+use std::{fs, path::{Path, PathBuf}, process::Command, time::{Duration,Instant}, thread};
 use os_economy::{EconomicMode, Treasury};
 use os_governance::{Decision, DecisionClass, GovernancePolicy};
 use os_survival::SurvivalDecision;
@@ -26,7 +26,7 @@ impl ToolRequest {
 }
 
 #[derive(Clone, Debug)]
-pub struct ExecutionContext { pub workspace_root: PathBuf, pub allowed_commands: Vec<String> }
+pub struct ExecutionContext { pub workspace_root: PathBuf, pub allowed_commands: Vec<String>, pub command_timeout: Duration, pub max_output_bytes: usize }
 #[derive(Clone, Debug)]
 pub struct ToolOutput { pub success: bool, pub stdout: String, pub stderr: String }
 #[derive(Clone, Debug)]
@@ -62,8 +62,8 @@ impl ExecutionEngine {
             },
             ToolRequest::RunCommand{program,args} => {
                 if !context.allowed_commands.iter().any(|x|x==program) { return Self::failed(planned,format!("command not allowlisted: {program}")); }
-                match Command::new(program).args(args).current_dir(&context.workspace_root).output(){
-                    Ok(o)=>ToolOutput{success:o.status.success(),stdout:String::from_utf8_lossy(&o.stdout).into_owned(),stderr:String::from_utf8_lossy(&o.stderr).into_owned()},
+                let mut child=match Command::new(program).args(args).current_dir(&context.workspace_root).spawn(){ Ok(c)=>c, Err(e)=>return Self::failed(planned,e.to_string()) };\n                let started=Instant::now();\n                let output=loop {\n                    match child.try_wait(){\n                        Ok(Some(_))=>break child.wait_with_output().ok(),\n                        Ok(None) if started.elapsed()>=context.command_timeout=>{let _=child.kill();let _=child.wait();return Self::failed(planned,"command timed out".into());}\n                        Ok(None)=>thread::sleep(Duration::from_millis(10)),\n                        Err(e)=>return Self::failed(planned,e.to_string()),\n                    }\n                };\n                match output{
+                    Ok(o)=>ToolOutput{success:o.status.success(),stdout:String::from_utf8_lossy(&o.stdout[..o.stdout.len().min(context.max_output_bytes)]).into_owned(),stderr:String::from_utf8_lossy(&o.stderr[..o.stderr.len().min(context.max_output_bytes)]).into_owned()},
                     Err(e)=>ToolOutput{success:false,stdout:String::new(),stderr:e.to_string()},
                 }
             }
