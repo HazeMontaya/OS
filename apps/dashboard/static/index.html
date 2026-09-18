@@ -1,0 +1,55 @@
+<!doctype html>
+<html lang="de">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>HazeMontaya OS — Agent World</title>
+<style>
+:root{--bg:#071018;--panel:#0d1822;--line:#1c3344;--text:#e8f1f7;--muted:#8da4b4;--accent:#65d4ff;--ok:#6ee7a8;--warn:#ffd166}
+*{box-sizing:border-box}body{margin:0;background:radial-gradient(circle at 50% 20%,#122b3b 0,#071018 55%);color:var(--text);font:14px system-ui,sans-serif}
+header{padding:22px 28px;border-bottom:1px solid var(--line);display:flex;justify-content:space-between;align-items:center}
+h1{font-size:20px;margin:0}button{background:#102b3b;border:1px solid #2a5369;color:var(--text);padding:9px 14px;border-radius:8px;cursor:pointer}button:hover{border-color:var(--accent)}
+main{display:grid;grid-template-columns:1fr 360px;gap:18px;padding:18px;max-width:1500px;margin:auto}
+#world{min-height:680px;border:1px solid var(--line);border-radius:14px;background:linear-gradient(145deg,#0b1923,#08131b);position:relative;overflow:hidden}
+.floor{position:absolute;inset:12% 5% 6%;border:1px solid #234355;border-radius:18px;transform:perspective(800px) rotateX(48deg);background:repeating-linear-gradient(90deg,transparent 0 59px,#102a38 60px),repeating-linear-gradient(0deg,transparent 0 59px,#102a38 60px)}
+.agent{position:absolute;width:92px;padding:10px 6px;text-align:center;border:1px solid #31576b;border-radius:10px;background:#10212c;box-shadow:0 8px 24px #0008}
+.dot{width:12px;height:12px;border-radius:50%;background:var(--accent);margin:0 auto 5px;box-shadow:0 0 15px #65d4ff}
+#side{display:flex;flex-direction:column;gap:12px}.panel{background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:15px}.grid{display:grid;grid-template-columns:1fr 1fr;gap:10px}.metric{font-size:22px;font-weight:700}.label{color:var(--muted);font-size:12px}.log{max-height:310px;overflow:auto;font:12px ui-monospace,monospace;color:#b8ccd8}.stage{color:var(--ok)}
+@media(max-width:900px){main{grid-template-columns:1fr}#world{min-height:520px}}
+</style>
+</head>
+<body>
+<header><h1>HazeMontaya OS · Autonomous Agent World</h1><div><span id="mode">—</span> <button onclick="tick()">Run cycle</button><button onclick="toggle()" id="auto">Auto: off</button></div></header>
+<main>
+<section id="world"><div class="floor"></div></section>
+<aside id="side">
+<div class="panel"><div class="grid">
+<div><div class="label">Treasury</div><div class="metric" id="balance">—</div></div>
+<div><div class="label">Runway</div><div class="metric" id="runway">—</div></div>
+<div><div class="label">Opportunities</div><div class="metric" id="opps">—</div></div>
+<div><div class="label">Events</div><div class="metric" id="events">—</div></div>
+</div></div>
+<div class="panel"><div class="label">Autonomous activity</div><div id="last" class="stage">Waiting</div></div>
+<div class="panel"><div class="label">Event stream</div><div id="log" class="log"></div></div>
+</aside>
+</main>
+<script>
+let timer=null;
+const positions=[[12,25],[28,43],[45,20],[60,48],[76,25],[18,65],[39,70],[62,72],[80,63]];
+function esc(s){return String(s).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]))}
+function render(s){
+ document.querySelector('#balance').textContent=s.treasury.balance_cents+'¢';
+ document.querySelector('#runway').textContent=s.treasury.runway_days==null?'∞':s.treasury.runway_days+'d';
+ document.querySelector('#opps').textContent=s.opportunities;
+ document.querySelector('#events').textContent=s.events;
+ document.querySelector('#mode').textContent=s.treasury.mode;
+ const world=document.querySelector('#world'); world.querySelectorAll('.agent').forEach(x=>x.remove());
+ s.agents.forEach((a,i)=>{const d=document.createElement('div');d.className='agent';d.style.left=positions[i][0]+'%';d.style.top=positions[i][1]+'%';d.innerHTML='<div class="dot"></div><b>'+esc(a.role)+'</b><div class="label">'+esc(a.id)+'</div>';world.appendChild(d)});
+ document.querySelector('#log').innerHTML=s.events_recent.map(e=>'<div>'+esc(e)+'</div>').join('');
+}
+async function state(){const r=await fetch('/api/state');render(await r.json())}
+async function tick(){const r=await fetch('/api/tick',{method:'POST'});const x=await r.json();document.querySelector('#last').textContent=x.summary;await state()}
+function toggle(){const b=document.querySelector('#auto');if(timer){clearInterval(timer);timer=null;b.textContent='Auto: off'}else{timer=setInterval(tick,5000);b.textContent='Auto: on';tick()}}
+state();
+</script>
+</body></html>
