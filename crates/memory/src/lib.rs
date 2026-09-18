@@ -13,9 +13,12 @@ impl Memory {
     pub fn recent(&self, limit: usize) -> &[MemoryEntry] { let start=self.entries.len().saturating_sub(limit); &self.entries[start..] }
 
     pub fn append_journal(&self, path: impl AsRef<Path>) -> io::Result<()> {
-        let Some(e)=self.entries.last() else { return Ok(()); };
+        let path=path.as_ref();
+        let existing=match File::open(path){Ok(file)=>BufReader::new(file).lines().count(),Err(e) if e.kind()==io::ErrorKind::NotFound=>0,Err(e)=>return Err(e)};
+        if existing>=self.entries.len(){return Ok(());}
         let mut file=OpenOptions::new().create(true).append(true).open(path)?;
-        writeln!(file,"{}\t{}\t{}\t{}",e.timestamp,escape(&e.agent),escape(&e.kind),escape(&e.content))
+        for e in self.entries.iter().skip(existing){writeln!(file,"{}\t{}\t{}\t{}",e.timestamp,escape(&e.agent),escape(&e.kind),escape(&e.content))?;}
+        Ok(())
     }
     pub fn load_journal(path: impl AsRef<Path>) -> io::Result<Self> {
         let file=match File::open(path){Ok(f)=>f,Err(e) if e.kind()==io::ErrorKind::NotFound=>return Ok(Self::default()),Err(e)=>return Err(e)};
