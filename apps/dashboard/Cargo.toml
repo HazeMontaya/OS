@@ -6,3 +6,4 @@ edition = "2021"
 [dependencies]
 os-runtime = { path = "../../crates/runtime" }
 os-events = { path = "../../crates/events" }
+os-orchestration = { path = "../../crates/orchestration" }
