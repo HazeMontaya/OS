@@ -10,28 +10,36 @@ use os_planner::{Planner,PlannerInput,RulePlanner};
 use os_model::EnvModelConfig;
 use os_commerce::Commerce;
 use os_research::ResearchPolicy;
+use os_orchestration::{AgentWorkspace, DecisionRecord, NodeKind, WorkGraph, WorkItem, WorkspaceRegistry, WorkspaceStatus};
+use os_model::{ModelCandidate, ModelError, ModelRouter};
 use std::path::PathBuf;
 use std::sync::atomic::{AtomicBool,Ordering};
 use std::time::Duration;
 
 #[derive(Clone,Debug)] pub struct Agent{pub id:String,pub role:String}
 #[derive(Clone,Debug)] pub struct CycleResult{pub kind:String,pub agent:String,pub summary:String,pub success:bool}
-#[derive(Clone,Debug)] pub struct RuntimeSnapshot{pub agents:Vec<Agent>,pub treasury:TreasurySnapshot,pub survival:SurvivalDecision,pub opportunities:usize,pub changes:usize,pub events:usize,pub queued_tasks:usize,pub customers:usize,pub outstanding_invoices_cents:i64}
+#[derive(Clone,Debug)] pub struct RuntimeSnapshot{pub agents:Vec<Agent>,pub treasury:TreasurySnapshot,pub survival:SurvivalDecision,pub opportunities:usize,pub changes:usize,pub events:usize,pub queued_tasks:usize,pub customers:usize,pub outstanding_invoices_cents:i64,pub work_items:usize,pub workspaces:usize,pub decisions:usize,pub model_candidates:usize}
 #[derive(Clone,Debug)] pub struct QueuedTask{pub agent:String,pub class:DecisionClass,pub cost:i64,pub tool:ToolRequest,pub approval:bool}
 pub struct Runtime{
  pub agents:Vec<Agent>,pub treasury:Treasury,pub opportunities:Vec<RevenueProject>,pub changes:Vec<ChangeProposal>,
- pub execution:ExecutionEngine,pub model:EnvModelConfig,pub planner:RulePlanner,pub commerce:Commerce,pub research_policy:ResearchPolicy,pub pending_tasks:Vec<QueuedTask>,pub events:EventLog,pub memory:Memory,pub context:ExecutionContext,thresholds:SurvivalThresholds,next_task:u64
+ pub execution:ExecutionEngine,pub model:EnvModelConfig,pub model_router:ModelRouter,pub planner:RulePlanner,pub commerce:Commerce,pub research_policy:ResearchPolicy,pub pending_tasks:Vec<QueuedTask>,pub events:EventLog,pub memory:Memory,pub context:ExecutionContext,pub work_graph:WorkGraph,pub work_items:Vec<WorkItem>,pub workspaces:WorkspaceRegistry,pub decisions:Vec<DecisionRecord>,thresholds:SurvivalThresholds,next_task:u64
 }
 impl Runtime{
  pub fn new(initial_balance_cents:i64)->Self{
   let roles=["Governor","Research","Business","Engineering","Content","Finance","Operations","QA","Security"];
   let agents=roles.iter().enumerate().map(|(i,r)|Agent{id:format!("agent-{:02}",i+1),role:(*r).into()}).collect();
   let mut treasury=Treasury::new(initial_balance_cents);treasury.set_burn_rate(100);
-  Self{agents,treasury,opportunities:vec![],changes:vec![],execution:ExecutionEngine::default(),model:EnvModelConfig::from_env(),planner:RulePlanner::default(),commerce:Commerce::default(),research_policy:ResearchPolicy::default(),pending_tasks:vec![],events:EventLog::default(),memory:Memory::default(),
+  let model=EnvModelConfig::from_env();
+  let mut model_router=ModelRouter::default();
+  if model.provider != "none" { model_router.register(ModelCandidate { provider:model.provider.clone(), model:model.model.clone(), healthy:true, remaining_quota_tokens:usize::MAX, estimated_cost_micros:0, latency_ms:u32::MAX }); }
+  let work_graph=default_work_graph(&agents);
+  let mut workspaces=WorkspaceRegistry::default();
+  for agent in &agents { workspaces.ensure(&agent.id, format!("workspaces/{}", agent.id)); }
+  Self{agents,treasury,opportunities:vec![],changes:vec![],execution:ExecutionEngine::default(),model,model_router,planner:RulePlanner::default(),commerce:Commerce::default(),research_policy:ResearchPolicy::default(),pending_tasks:vec![],events:EventLog::default(),memory:Memory::default(),
    context:ExecutionContext{workspace_root:PathBuf::from("."),allowed_commands:vec!["cargo".into(),"rustc".into(),"git".into()],command_timeout:Duration::from_secs(30),max_output_bytes:64*1024},
-   thresholds:SurvivalThresholds{explore_days:30,operate_days:14,optimize_days:7,emergency_days:2},next_task:1}
+   work_graph,work_items:vec![],workspaces,decisions:vec![],thresholds:SurvivalThresholds{explore_days:30,operate_days:14,optimize_days:7,emergency_days:2},next_task:1}
  }
- pub fn snapshot(&self)->RuntimeSnapshot{let t=self.treasury.snapshot(self.thresholds);RuntimeSnapshot{agents:self.agents.clone(),survival:os_survival::replan(t.mode),treasury:t,opportunities:self.opportunities.len(),changes:self.changes.len(),events:self.events.len(),queued_tasks:self.pending_tasks.len(),customers:self.commerce.customers.len(),outstanding_invoices_cents:self.commerce.outstanding_cents()}}
+ pub fn snapshot(&self)->RuntimeSnapshot{let t=self.treasury.snapshot(self.thresholds);RuntimeSnapshot{agents:self.agents.clone(),survival:os_survival::replan(t.mode),treasury:t,opportunities:self.opportunities.len(),changes:self.changes.len(),events:self.events.len(),queued_tasks:self.pending_tasks.len(),customers:self.commerce.customers.len(),outstanding_invoices_cents:self.commerce.outstanding_cents(),work_items:self.work_items.len(),workspaces:self.workspaces.all().count(),decisions:self.decisions.len(),model_candidates:self.model_router.candidates().len()}}
  pub fn queue_task(&mut self,agent:impl Into<String>,class:DecisionClass,cost:i64,tool:ToolRequest,approval:bool){self.pending_tasks.push(QueuedTask{agent:agent.into(),class,cost:cost.max(0),tool,approval});}
  pub fn execute_next_queued_task(&mut self)->Option<ExecutionResult>{
      let task=self.pending_tasks.first()?.clone();
@@ -40,14 +48,26 @@ impl Runtime{
  }
  pub fn submit_task(&mut self,agent:&str,class:DecisionClass,cost:i64,tool:ToolRequest,approval:bool)->ExecutionResult{
   let snap=self.snapshot();let task=AgentTask{id:format!("task-{:06}",self.next_task),agent:agent.into(),class,estimated_cost_cents:cost.max(0),status:TaskStatus::Queued,tool};
-  self.next_task+=1;let planned=self.execution.plan(&task,&self.treasury,snap.treasury.mode,snap.survival,approval);
+  self.next_task+=1;
+  let mut decision=DecisionRecord::new(task.id.clone(),task.agent.clone(),format!("Execute {} under {:?}",task.tool.name(),class),task.tool.name());
+  decision.expected_outcome="task admitted and verified by the execution result".into();
+  decision.evidence.push(format!("economic_mode={:?}",snap.treasury.mode));
+  let planned=self.execution.plan(&task,&self.treasury,snap.treasury.mode,snap.survival,approval);
   if planned.status==TaskStatus::Queued{
+   if let Ok(item)=self.work_graph.start_item(task.id.clone(),task.agent.clone(),format!("tool:{}",task.tool.name()),&task.agent){self.work_items.push(item);}
    self.events.push(Event::TaskQueued{task_id:task.id.clone(),agent:task.agent.clone()});
    self.events.push(Event::TaskStarted{task_id:task.id.clone()});self.events.push(Event::ToolCalled{task_id:task.id.clone(),tool:task.tool.name().into()});
    let result=self.execution.execute(&task,&self.context,planned);
+   if let Some(item)=self.work_items.last_mut(){ self.work_graph.terminal(item,result.status==TaskStatus::Completed); }
+   decision.close(if result.status==TaskStatus::Completed {"completed"} else {"failed"},result.message.clone(),if result.status==TaskStatus::Completed {"reuse successful procedure"} else {"inspect failure before retry"});
+   self.decisions.push(decision);
    self.events.push(Event::ToolCompleted{task_id:task.id.clone(),tool:task.tool.name().into(),success:result.status==TaskStatus::Completed});
    if result.status==TaskStatus::Completed{self.events.push(Event::TaskCompleted{task_id:task.id.clone()});} result
-  }else{self.events.push(Event::TaskBlocked{task_id:task.id.clone(),reason:planned.message.clone()});planned}
+  }else{
+   decision.close("blocked",planned.message.clone(),"policy blocked execution");
+   self.decisions.push(decision);
+   self.events.push(Event::TaskBlocked{task_id:task.id.clone(),reason:planned.message.clone()});planned
+  }
  }
  pub fn heartbeat(&mut self, agent:&str, class:DecisionClass, cost:i64, tool:ToolRequest, approval:bool) -> ExecutionResult {
   self.events.push(Event::HeartbeatStarted { agent: agent.into() });
@@ -228,3 +248,4 @@ fn parse_stage(s:&str)->Option<os_revenue::RevenueStage>{match s{"Discovered"=>S
  #[test]fn readonly_executes_real_tool(){let mut r=Runtime::new(100_000);r.context.workspace_root=std::env::temp_dir();let result=r.submit_task("agent-02",DecisionClass::ReadOnly,0,ToolRequest::ReadFile{path:PathBuf::from("haze-os-runtime-test.txt")},false);assert_eq!(result.status,TaskStatus::Failed);assert!(r.snapshot().events>=4);
 }
 }
+\nfn default_work_graph(agents:&[Agent])->WorkGraph {\n    let mut g=WorkGraph::default();\n    for agent in agents { let _=g.add_node(os_orchestration::WorkNode{id:agent.id.clone(),label:agent.role.clone(),agent_id:Some(agent.id.clone()),kind:NodeKind::Agent,class:DecisionClass::ReadOnly}); }\n    let edges=[("agent-01","agent-02"),("agent-01","agent-09"),("agent-02","agent-03"),("agent-02","agent-04"),("agent-09","agent-08"),("agent-04","agent-08"),("agent-03","agent-05"),("agent-05","agent-06"),("agent-06","agent-07")];\n    for (from,to) in edges { let _=g.connect(from,to,8); }\n    g\n}\n\n
