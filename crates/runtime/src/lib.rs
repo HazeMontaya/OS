@@ -36,9 +36,11 @@ impl Runtime{
   }else{self.events.push(Event::TaskBlocked{task_id:task.id.clone(),reason:planned.message.clone()});planned}
  }
  pub fn heartbeat(&mut self, agent:&str, class:DecisionClass, cost:i64, tool:ToolRequest, approval:bool) -> ExecutionResult {
+  self.events.push(Event::HeartbeatStarted { agent: agent.into() });
   self.memory.remember(agent, "thought", "select task and execute through governance");
   let result = self.submit_task(agent, class, cost, tool, approval);
   self.memory.remember(agent, "observation", format!("{:?}: {}", result.status, result.message));
+  self.events.push(Event::HeartbeatFinished { agent: agent.into(), status: format!("{:?}", result.status) });
   result
 }
 
@@ -61,6 +63,7 @@ pub fn advance_best_revenue_project(&mut self) -> Option<os_revenue::RevenueStag
     let project = &mut self.opportunities[index];
     let stage = project.advance().ok()?;
     self.memory.remember("agent-03", "revenue", format!("{} advanced to {:?}", project.opportunity.name, stage));
+    self.events.push(Event::RevenueStageAdvanced { opportunity_id: project.opportunity.id.clone(), stage: format!("{:?}", stage) });
     Some(stage)
 }
  pub fn register_change(&mut self,p:ChangeProposal){self.changes.push(p)}
