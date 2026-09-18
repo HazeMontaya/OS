@@ -11,6 +11,7 @@ members = [
   "crates/memory",
   "crates/planner",
   "crates/model",
+  "crates/capabilities",
   "crates/runtime",
   "apps/cli",
   "apps/dashboard",
