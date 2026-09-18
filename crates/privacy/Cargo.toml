@@ -1,8 +1,0 @@
-[package]
-name = "os-privacy"
-version.workspace = true
-edition.workspace = true
-publish = false
-
-[dependencies]
-os-contracts = { path = "../contracts" }

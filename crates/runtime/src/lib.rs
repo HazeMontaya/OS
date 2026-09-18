@@ -1,119 +1,54 @@
-use os_agents::{AgentRegistry, AgentSpec};
-use os_automation::AutomationGraph;
-use os_system::SystemDescriptor;
-use os_tools::{ToolManifest, ToolRegistry, ToolRisk};
-use serde::{Deserialize, Serialize};
-use serde_json::json;
-use std::collections::{BTreeMap, BTreeSet};
+use os_economy::{SurvivalThresholds, Treasury, TreasurySnapshot};
+use os_evolution::ChangeProposal;
+use os_execution::{AgentTask, ExecutionEngine, ExecutionResult};
+use os_governance::DecisionClass;
+use os_revenue::{Opportunity, RevenueProject};
+use os_survival::SurvivalDecision;
 
-#[derive(Debug)]
-pub struct RuntimeCatalog {
-    pub agents: AgentRegistry,
-    pub tools: ToolRegistry,
-    pub automations: BTreeMap<String, AutomationGraph>,
-    pub system: SystemDescriptor,
+#[derive(Clone, Debug)]
+pub struct Agent {
+    pub id: String,
+    pub role: String,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Clone, Debug)]
 pub struct RuntimeSnapshot {
-    pub agent_count: usize,
-    pub tool_count: usize,
-    pub automation_count: usize,
-    pub platform: String,
-    pub architecture: String,
-    pub surfaces: Vec<String>,
+    pub agents: Vec<Agent>,
+    pub treasury: TreasurySnapshot,
+    pub survival: SurvivalDecision,
+    pub opportunities: usize,
+    pub changes: usize,
 }
 
-impl RuntimeCatalog {
-    pub fn with_defaults() -> Self {
-        let mut agents = AgentRegistry::default();
-        let mut core = AgentSpec::new(
-            "OS Core",
-            "Coordinate cognition, retrieval, models, tools and verification",
-        );
-        core.capabilities = vec![
-            "Memory.Read".into(),
-            "Knowledge.Read".into(),
-            "Model.Invoke".into(),
-        ];
-        agents.register(core).expect("default agent id is unique");
+pub struct Runtime {
+    pub agents: Vec<Agent>,
+    pub treasury: Treasury,
+    pub opportunities: Vec<RevenueProject>,
+    pub changes: Vec<ChangeProposal>,
+    pub execution: ExecutionEngine,
+    thresholds: SurvivalThresholds,
+}
 
-        let mut tools = ToolRegistry::default();
-        for manifest in default_tools() {
-            tools
-                .register(manifest)
-                .expect("default tool ids are unique");
-        }
-
-        Self {
-            agents,
-            tools,
-            automations: BTreeMap::new(),
-            system: SystemDescriptor::detect(),
-        }
+impl Runtime {
+    pub fn new(initial_balance_cents: i64) -> Self {
+        let roles = ["Governor","Research","Business","Engineering","Content","Finance","Operations","QA","Security"];
+        let agents = roles.iter().enumerate().map(|(i, role)| Agent { id: format!("agent-{:02}", i+1), role: (*role).into() }).collect();
+        let mut treasury = Treasury::new(initial_balance_cents);
+        treasury.set_burn_rate(100);
+        Self { agents, treasury, opportunities: Vec::new(), changes: Vec::new(), execution: ExecutionEngine::default(), thresholds: SurvivalThresholds { explore_days: 30, operate_days: 14, optimize_days: 7, emergency_days: 2 } }
     }
 
     pub fn snapshot(&self) -> RuntimeSnapshot {
-        RuntimeSnapshot {
-            agent_count: self.agents.list().count(),
-            tool_count: self.tools.list().count(),
-            automation_count: self.automations.len(),
-            platform: self.system.platform.clone(),
-            architecture: self.system.architecture.clone(),
-            surfaces: vec![
-                "main".into(),
-                "knowledge".into(),
-                "memory".into(),
-                "agents".into(),
-                "developer".into(),
-                "system".into(),
-                "settings".into(),
-                "automation".into(),
-            ],
-        }
+        let treasury = self.treasury.snapshot(self.thresholds);
+        RuntimeSnapshot { agents: self.agents.clone(), survival: os_survival::replan(treasury.mode), treasury, opportunities: self.opportunities.len(), changes: self.changes.len() }
     }
-}
 
-fn default_tools() -> Vec<ToolManifest> {
-    vec![
-        ToolManifest {
-            id: "filesystem.read".into(),
-            name: "Filesystem Read".into(),
-            description: "Read an explicitly scoped file or directory".into(),
-            input_schema: json!({"type":"object","required":["path"],"properties":{"path":{"type":"string"}}}),
-            capabilities: BTreeSet::from(["Filesystem.Read".into()]),
-            risk: ToolRisk::ReadOnly,
-            provider: "native".into(),
-        },
-        ToolManifest {
-            id: "git.inspect".into(),
-            name: "Git Inspect".into(),
-            description: "Inspect repository state without mutation".into(),
-            input_schema: json!({"type":"object","properties":{"repository":{"type":"string"}}}),
-            capabilities: BTreeSet::from(["Filesystem.Read".into()]),
-            risk: ToolRisk::ReadOnly,
-            provider: "native".into(),
-        },
-        ToolManifest {
-            id: "network.request".into(),
-            name: "Network Request".into(),
-            description: "Perform a policy-gated outbound request".into(),
-            input_schema: json!({"type":"object","required":["url"],"properties":{"url":{"type":"string"}}}),
-            capabilities: BTreeSet::from(["Network.Request".into()]),
-            risk: ToolRisk::ExternalAction,
-            provider: "native".into(),
-        },
-    ]
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn bootstrap_exposes_all_product_surfaces() {
-        let snapshot = RuntimeCatalog::with_defaults().snapshot();
-        assert_eq!(snapshot.surfaces.len(), 8);
-        assert!(snapshot.tool_count >= 3);
+    pub fn submit_task(&self, agent: &str, class: DecisionClass, cost_cents: i64) -> ExecutionResult {
+        let s = self.snapshot();
+        let task = AgentTask { id: format!("task-{}", self.opportunities.len() + self.changes.len() + 1), agent: agent.into(), class, estimated_cost_cents: cost_cents.max(0), status: os_execution::TaskStatus::Queued };
+        self.execution.plan(&task, &self.treasury, s.treasury.mode, s.survival)
     }
+
+    pub fn register_opportunity(&mut self, opportunity: Opportunity) { self.opportunities.push(RevenueProject::new(opportunity)); }
+    pub fn register_change(&mut self, proposal: ChangeProposal) { self.changes.push(proposal); }
 }

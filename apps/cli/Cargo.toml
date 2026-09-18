@@ -1,9 +1,5 @@
 [package]
 name = "os-cli"
-version.workspace = true
-edition.workspace = true
-publish = false
-
-[dependencies]
-os-runtime = { path = "../../crates/runtime" }
-serde_json.workspace = true
+version = "0.1.0"
+edition = "2021"
+dependencies = { os-runtime = { path = "../../crates/runtime" } }

@@ -1,13 +1,12 @@
 [package]
 name = "os-runtime"
-version.workspace = true
-edition.workspace = true
-publish = false
-
-[dependencies]
-os-agents = { path = "../agents" }
-os-automation = { path = "../automation" }
-os-system = { path = "../system" }
-os-tools = { path = "../tools" }
-serde.workspace = true
-serde_json.workspace = true
+version = "0.1.0"
+edition = "2021"
+dependencies = {
+  os-economy = { path = "../economy" },
+  os-governance = { path = "../governance" },
+  os-survival = { path = "../survival" },
+  os-revenue = { path = "../revenue" },
+  os-evolution = { path = "../evolution" },
+  os-execution = { path = "../execution" },
+}

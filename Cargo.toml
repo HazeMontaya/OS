@@ -1,36 +1,12 @@
 [workspace]
 resolver = "2"
 members = [
-  "apps/cli",
-  "apps/devtools",
-  "apps/desktop/src-tauri",
-  "crates/contracts",
-  "crates/event-ledger",
-  "crates/memory",
-  "crates/knowledge-graph",
-  "crates/storage",
-  "crates/retrieval",
-  "crates/semantic-index",
-  "crates/privacy",
-  "crates/policy",
-  "crates/model-gateway",
-  "crates/telemetry",
-  "crates/orchestrator",
-  "crates/agents",
-  "crates/tools",
-  "crates/automation",
-  "crates/system",
+  "crates/economy",
+  "crates/governance",
+  "crates/survival",
+  "crates/revenue",
+  "crates/evolution",
+  "crates/execution",
   "crates/runtime",
-  "crates/kernel",
+  "apps/cli",
 ]
-
-[workspace.package]
-version = "0.1.0"
-edition = "2024"
-publish = false
-
-[workspace.dependencies]
-serde = { version = "1", features = ["derive"] }
-serde_json = "1"
-uuid = { version = "1", features = ["v4", "serde"] }
-thiserror = "2"

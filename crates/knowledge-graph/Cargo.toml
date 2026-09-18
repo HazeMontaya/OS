@@ -1,8 +1,0 @@
-[package]
-name = "os-knowledge-graph"
-version.workspace = true
-edition.workspace = true
-publish = false
-
-[dependencies]
-os-contracts = { path = "../contracts" }

@@ -1,8 +1,0 @@
-[package]
-name = "os-semantic-index"
-version.workspace = true
-edition.workspace = true
-publish = false
-
-[dependencies]
-thiserror.workspace = true

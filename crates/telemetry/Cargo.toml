@@ -1,8 +1,0 @@
-[package]
-name = "os-telemetry"
-version.workspace = true
-edition.workspace = true
-publish = false
-
-[dependencies]
-uuid.workspace = true

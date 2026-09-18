@@ -1,23 +1,10 @@
-use os_runtime::RuntimeCatalog;
-
 fn main() {
-    let command = std::env::args().nth(1).unwrap_or_else(|| "doctor".into());
-    match command.as_str() {
-        "doctor" | "status" => {
-            let snapshot = RuntimeCatalog::with_defaults().snapshot();
-            println!(
-                "{}",
-                serde_json::to_string_pretty(&snapshot).expect("runtime snapshot serializes")
-            );
-        }
-        "surfaces" => {
-            for surface in RuntimeCatalog::with_defaults().snapshot().surfaces {
-                println!("{surface}");
-            }
-        }
-        _ => {
-            eprintln!("usage: os-cli [doctor|status|surfaces]");
-            std::process::exit(2);
-        }
-    }
+    let runtime = os_runtime::Runtime::new(100_000);
+    let s = runtime.snapshot();
+    println!("HazeMontaya OS");
+    println!("agents: {}", s.agents.len());
+    println!("treasury: {} cents", s.treasury.balance_cents);
+    println!("runway: {:?}", s.treasury.runway_days);
+    println!("mode: {:?}", s.treasury.mode);
+    println!("survival: {:?}", s.survival);
 }

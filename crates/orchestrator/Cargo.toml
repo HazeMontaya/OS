@@ -1,9 +1,0 @@
-[package]
-name = "os-orchestrator"
-version.workspace = true
-edition.workspace = true
-publish = false
-
-[dependencies]
-os-model-gateway = { path = "../model-gateway" }
-os-policy = { path = "../policy" }

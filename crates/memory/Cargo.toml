@@ -1,8 +1,0 @@
-[package]
-name = "os-memory"
-version.workspace = true
-edition.workspace = true
-publish = false
-
-[dependencies]
-os-contracts = { path = "../contracts" }
