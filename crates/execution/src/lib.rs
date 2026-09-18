@@ -68,7 +68,7 @@ impl ExecutionEngine {
                 let started=Instant::now();
 let output=loop {
 match child.try_wait(){
-Ok(Some(_))=>break child.wait_with_output().ok(),
+Ok(Some(_))=>break child.wait_with_output(),
 Ok(None) if started.elapsed()>=context.command_timeout=>{let _=child.kill();let _=child.wait();return Self::failed(planned,"command timed out".into());}
 Ok(None)=>thread::sleep(Duration::from_millis(10)),
 Err(e)=>return Self::failed(planned,e.to_string()),
