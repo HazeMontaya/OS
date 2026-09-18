@@ -64,6 +64,15 @@ impl Runtime{
  }
  pub fn next_ready_goals(&self)->Vec<&Goal>{ self.goals.actionable_ready() }
  pub fn set_goal_status(&mut self,id:&str,status:GoalStatus)->Result<(),String>{ self.goals.set_status(id,status) }
+ pub fn refresh_model_catalog(&mut self)->Result<usize,ModelError>{
+  let provider=os_model::OpenAiCompatibleProvider::from_env(&self.model)?;
+  let models=provider.discover_models()?;
+  for model in &models {
+    self.model_router.register(ModelCandidate{provider:self.model.provider.clone(),model:model.clone(),healthy:true,remaining_quota_tokens:usize::MAX,estimated_cost_micros:0,latency_ms:env_latency_ms(),capabilities:env_model_capabilities()});
+  }
+  self.memory.remember("agent-01","models",format!("discovered {} models from {}",models.len(),self.model.provider));
+  Ok(models.len())
+ }
  pub fn route_model(&self, task_kind:&str, min_quota_tokens:usize, max_latency_ms:Option<u32>) -> Result<RoutingDecision,ModelError> { self.model_router.route_for_task(task_kind,min_quota_tokens,max_latency_ms) }
  pub fn complete_model(&mut self, task_kind:&str, request:&ModelRequest) -> Result<ModelResponse,ModelError> {
   let plan=self.model_router.route_plan_for_task(task_kind,request.max_tokens,None)?;
