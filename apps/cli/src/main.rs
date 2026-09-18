@@ -1,6 +1,4 @@
-use os_governance::DecisionClass;
 use os_revenue::Opportunity;
-use os_execution::ToolRequest;
 use os_runtime::Runtime;
 use std::io::{self, BufRead};
 use std::sync::{Arc,atomic::{AtomicBool,Ordering}};
@@ -51,16 +49,9 @@ fn main() {
     let cycles = runtime.run_until_stopped(&stop, Duration::from_secs(2));
     println!();
     println!("Stopped after {cycles} autonomous cycles.");
-    println!("events: {}", runtime.snapshot().events);
-
-    let _ = runtime.heartbeat(
-        "agent-02",
-        DecisionClass::ReadOnly,
-        0,
-        ToolRequest::RunCommand {
-            program: "rustc".into(),
-            args: vec!["--version".into()],
-        },
-        false,
-    );
+    let final_snapshot = runtime.snapshot();
+    println!("events: {}", final_snapshot.events);
+    println!("treasury: {} cents", final_snapshot.treasury.balance_cents);
+    println!("runway: {:?}", final_snapshot.treasury.runway_days);
+    println!("mode: {:?}", final_snapshot.treasury.mode);
 }
