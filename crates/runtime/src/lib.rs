@@ -112,9 +112,21 @@ impl Runtime{
      let tmp=path.with_extension("tmp");
      let s=self.treasury.snapshot(self.thresholds);
      let mut f=std::fs::File::create(&tmp)?;
-     writeln!(f,"version\t1")?;
+     writeln!(f,"version\t2")?;
      writeln!(f,"treasury\t{}\t{}\t{}\t{}\t{}",s.balance_cents,s.reserved_cents,s.revenue_cents,s.expense_cents,s.burn_rate_cents_per_day)?;
      writeln!(f,"next_task\t{}",self.next_task)?;
+     for task in &self.pending_tasks {
+         write!(f,"task\t{}\t{:?}\t{}\t{}\t{}",esc(&task.agent),task.class,task.cost,task.approval,tool_kind(&task.tool))?;
+         match &task.tool {
+             ToolRequest::ReadFile{path} => writeln!(f,"\t{}",esc(&path.to_string_lossy()))?,
+             ToolRequest::WriteFile{path,content} => writeln!(f,"\t{}\t{}",esc(&path.to_string_lossy()),esc(content))?,
+             ToolRequest::RunCommand{program,args} => {
+                 write!(f,"\t{}",esc(program))?;
+                 for arg in args { write!(f,"\t{}",esc(arg))?; }
+                 writeln!(f)?;
+             }
+         }
+     }
      for p in &self.opportunities { writeln!(f,"opportunity\t{}\t{}\t{}\t{}\t{}\t{}\t{:?}",esc(&p.opportunity.id),esc(&p.opportunity.name),esc(&p.opportunity.hypothesis),p.opportunity.expected_revenue_cents,p.opportunity.expected_cost_cents,p.opportunity.confidence_bps,p.stage)?; }
      f.sync_all()?; std::fs::rename(tmp,path)?; Ok(())
  }
@@ -126,6 +138,16 @@ impl Runtime{
          match p.next().unwrap_or("") {
              "treasury" => { let v:Vec<_>=p.collect(); if v.len()==5 { if let (Ok(b),Ok(r),Ok(rv),Ok(ex),Ok(br))=(v[0].parse(),v[1].parse(),v[2].parse(),v[3].parse(),v[4].parse()){self.treasury.restore_state(b,r,rv,ex,br);} } }
              "next_task" => if let Some(v)=p.next(){if let Ok(n)=v.parse::<u64>(){self.next_task=n.max(1);}}
+             "task" => {
+                 let v:Vec<_>=p.collect();
+                 if v.len()>=6 {
+                     if let (Some(class),Ok(cost),Ok(approval))=(parse_decision_class(v[1]),v[2].parse::<i64>(),v[3].parse::<bool>()) {
+                         if let Some(tool)=parse_tool(v[4],&v[5..]) {
+                             self.pending_tasks.push(QueuedTask{agent:unesc(v[0]),class,cost:cost.max(0),tool,approval});
+                         }
+                     }
+                 }
+             }
              "opportunity" => { let v:Vec<_>=p.collect(); if v.len()==7 { if let (Ok(rev),Ok(cost),Ok(conf))=(v[3].parse(),v[4].parse(),v[5].parse()){if let Some(stage)=parse_stage(v[6]){self.opportunities.push(RevenueProject{opportunity:Opportunity{id:unesc(v[0]),name:unesc(v[1]),hypothesis:unesc(v[2]),expected_revenue_cents:rev,expected_cost_cents:cost,confidence_bps:conf},stage});}}}}
              _ => {}
          }
@@ -180,6 +202,13 @@ fn unesc(s: &str) -> String {
     }
     out
 }
+fn tool_kind(tool:&ToolRequest)->&'static str{match tool{ToolRequest::ReadFile{..}=>"ReadFile",ToolRequest::WriteFile{..}=>"WriteFile",ToolRequest::RunCommand{..}=>"RunCommand"}}
+fn parse_decision_class(s:&str)->Option<DecisionClass>{match s{"ReadOnly"=>Some(DecisionClass::ReadOnly),"Reversible"=>Some(DecisionClass::Reversible),"External"=>Some(DecisionClass::External),"Financial"=>Some(DecisionClass::Financial),"Destructive"=>Some(DecisionClass::Destructive),"SelfModification"=>Some(DecisionClass::SelfModification),"Replication"=>Some(DecisionClass::Replication),_=>None}}
+fn parse_tool(kind:&str,fields:&[&str])->Option<ToolRequest>{match kind{
+ "ReadFile"=>Some(ToolRequest::ReadFile{path:PathBuf::from(unesc(*fields.first()?))}),
+ "WriteFile"=>Some(ToolRequest::WriteFile{path:PathBuf::from(unesc(*fields.first()?)),content:unesc(*fields.get(1)?)}),
+ "RunCommand"=>Some(ToolRequest::RunCommand{program:unesc(*fields.first()?),args:fields.iter().skip(1).map(|v|unesc(v)).collect()}),
+ _=>None}}
 fn parse_stage(s:&str)->Option<os_revenue::RevenueStage>{match s{"Discovered"=>Some(os_revenue::RevenueStage::Discovered),"Validating"=>Some(os_revenue::RevenueStage::Validating),"Building"=>Some(os_revenue::RevenueStage::Building),"Selling"=>Some(os_revenue::RevenueStage::Selling),"Delivering"=>Some(os_revenue::RevenueStage::Delivering),"Measuring"=>Some(os_revenue::RevenueStage::Measuring),"Stopped"=>Some(os_revenue::RevenueStage::Stopped),_=>None}}
 
 #[cfg(test)]mod tests{
