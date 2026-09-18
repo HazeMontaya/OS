@@ -58,7 +58,7 @@ impl GoalGraph {
             .collect()
     }
 
-    pub fn actionable_ready(&self) -> Vec<&Goal> { self.ready().into_iter().filter(|goal| goal.kind == GoalKind::Task && goal.action.is_some()).collect() }
+    pub fn actionable_ready(&self) -> Vec<&Goal> { self.goals.values().filter(|goal| goal.kind == GoalKind::Task && goal.status == GoalStatus::Proposed && goal.action.is_some() && goal.depends_on.iter().all(|id| self.goals.get(id).map(|g| g.status == GoalStatus::Completed).unwrap_or(false) || goal.depends_on.is_empty())).collect() }
 
     pub fn set_status(&mut self, id: &str, status: GoalStatus) -> Result<(), String> {
         let goal=self.goals.get_mut(id).ok_or_else(|| "unknown goal".to_string())?;
