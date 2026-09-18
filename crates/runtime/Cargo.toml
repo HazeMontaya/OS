@@ -13,4 +13,6 @@ dependencies = {
   os-memory = { path = "../memory" },
   os-planner = { path = "../planner" },
   os-model = { path = "../model" },
+  os-commerce = { path = "../commerce" },
+  os-research = { path = "../research" },
 }
