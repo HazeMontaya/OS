@@ -88,6 +88,37 @@ impl Runtime{
   }
  }
  pub fn run_cycles(&mut self, count: usize) -> Vec<CycleResult> {(0..count).map(|_| self.run_cycle()).collect()}
+ pub fn save_state(&self, path: impl AsRef<std::path::Path>) -> std::io::Result<()> {
+     use std::io::Write;
+     let path=path.as_ref();
+     if let Some(parent)=path.parent(){std::fs::create_dir_all(parent)?;}
+     let tmp=path.with_extension("tmp");
+     let s=self.treasury.snapshot(self.thresholds);
+     let mut f=std::fs::File::create(&tmp)?;
+     writeln!(f,"version\\t1")?;
+     writeln!(f,"treasury\\t{}\\t{}\\t{}\\t{}\\t{}",s.balance_cents,s.reserved_cents,s.revenue_cents,s.expense_cents,s.burn_rate_cents_per_day)?;
+     writeln!(f,"next_task\\t{}",self.next_task)?;
+     for p in &self.opportunities { writeln!(f,"opportunity\\t{}\\t{}\\t{}\\t{}\\t{}\\t{}\\t{:?}",esc(&p.opportunity.id),esc(&p.opportunity.name),esc(&p.opportunity.hypothesis),p.opportunity.expected_revenue_cents,p.opportunity.expected_cost_cents,p.opportunity.confidence_bps,p.stage)?; }
+     f.sync_all()?; std::fs::rename(tmp,path)?; Ok(())
+ }
+ pub fn load_state(&mut self, path: impl AsRef<std::path::Path>) -> std::io::Result<()> {
+     use std::io::{BufRead,BufReader};
+     let file=match std::fs::File::open(path){Ok(f)=>f,Err(e) if e.kind()==std::io::ErrorKind::NotFound=>return Ok(()),Err(e)=>return Err(e)};
+     for line in BufReader::new(file).lines() {
+         let line=line?; let mut p=line.split('\\t');
+         match p.next().unwrap_or("") {
+             "treasury" => { let v:Vec<_>=p.collect(); if v.len()==5 { if let (Ok(b),Ok(r),Ok(rv),Ok(ex),Ok(br))=(v[0].parse(),v[1].parse(),v[2].parse(),v[3].parse(),v[4].parse()){self.treasury.restore_state(b,r,rv,ex,br);} } }
+             "next_task" => if let Some(v)=p.next(){if let Ok(n)=v.parse(){self.next_task=n.max(1);}}
+             "opportunity" => { let v:Vec<_>=p.collect(); if v.len()==7 { if let (Ok(rev),Ok(cost),Ok(conf))=(v[3].parse(),v[4].parse(),v[5].parse()){if let Some(stage)=parse_stage(v[6]){self.opportunities.push(RevenueProject{opportunity:Opportunity{id:unesc(v[0]),name:unesc(v[1]),hypothesis:unesc(v[2]),expected_revenue_cents:rev,expected_cost_cents:cost,confidence_bps:conf},stage});}}}}
+             _ => {}
+         }
+     }
+     Ok(())
+ }
+ pub fn checkpoint(&self, state: impl AsRef<std::path::Path>, events: impl AsRef<std::path::Path>, memory: impl AsRef<std::path::Path>) -> std::io::Result<()> {
+     self.save_state(state)?; self.events.append_journal(events)?; self.memory.append_journal(memory)
+ }
+
  pub fn run_until_stopped(&mut self, stop: &AtomicBool, interval: Duration) -> usize {
      let mut cycles = 0;
      while !stop.load(Ordering::Relaxed) {
@@ -106,6 +137,11 @@ impl Runtime{
  pub fn record_revenue(&mut self,cents:i64,memo:impl Into<String>){let memo=memo.into();self.treasury.record_revenue(cents,memo.clone());self.events.push(Event::RevenueRecorded{cents,memo});}
  pub fn record_expense(&mut self,cents:i64,memo:impl Into<String>)->Result<(),&'static str>{let memo=memo.into();let r=self.treasury.record_expense(cents,memo.clone());if r.is_ok(){self.events.push(Event::ExpenseRecorded{cents,memo});}r}
 }
+
+fn esc(s:&str)->String{s.replace('\\',"\\\\").replace('\t',"\\t").replace('\n',"\\n").replace('\r',"\\r")}
+fn unesc(s:&str)->String{let mut o=String::new();let mut c=s.chars();while let Some(x)=c.next(){if x=='\\'{match c.next(){Some('t')=>o.push('\t'),Some('n')=>o.push('\n'),Some('r')=>o.push('\r'),Some('\\')=>o.push('\\'),Some(y)=>{o.push('\\');o.push(y)},None=>o.push('\\')}}else{o.push(x)}}o}
+fn parse_stage(s:&str)->Option<os_revenue::RevenueStage>{match s{"Discovered"=>Some(os_revenue::RevenueStage::Discovered),"Validating"=>Some(os_revenue::RevenueStage::Validating),"Building"=>Some(os_revenue::RevenueStage::Building),"Selling"=>Some(os_revenue::RevenueStage::Selling),"Delivering"=>Some(os_revenue::RevenueStage::Delivering),"Measuring"=>Some(os_revenue::RevenueStage::Measuring),"Stopped"=>Some(os_revenue::RevenueStage::Stopped),_=>None}}
+
 #[cfg(test)]mod tests{
  use super::*;
  #[test]fn boots(){assert_eq!(Runtime::new(100_000).agents.len(),9)}
