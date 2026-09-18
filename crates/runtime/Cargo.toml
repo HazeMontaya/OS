@@ -10,4 +10,5 @@ dependencies = {
   os-evolution = { path = "../evolution" },
   os-execution = { path = "../execution" },
   os-events = { path = "../events" },
+  os-memory = { path = "../memory" },
 }
