@@ -228,7 +228,7 @@ impl ModelProvider for OpenAiCompatibleProvider {
         });
         let response = reqwest::blocking::Client::new()
             .post(&self.endpoint)
-            .bearer_auth(&self.api_key)
+            .bearer_auth_if_present(&self.api_key)
             .json(&body)
             .send()
             .map_err(|e| ModelError::Unavailable(e.to_string()))?;
