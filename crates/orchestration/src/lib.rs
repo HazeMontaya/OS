@@ -27,7 +27,7 @@ pub struct WorkEdge {
     pub max_hops: u32,
 }
 
-#[derive(Clone, Debug, Eq, PartialEq)]
+#[derive(serde::Serialize, serde::Deserialize, Clone, Debug, Eq, PartialEq)]
 pub struct WorkItem {
     pub id: String,
     pub origin: String,
@@ -38,7 +38,7 @@ pub struct WorkItem {
     pub status: WorkItemStatus,
 }
 
-#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+#[derive(serde::Serialize, serde::Deserialize, Clone, Copy, Debug, Eq, PartialEq)]
 pub enum WorkItemStatus {
     Queued,
     Running,
@@ -133,7 +133,7 @@ impl WorkGraph {
 }
 
 
-#[derive(Clone, Debug, Eq, PartialEq)]
+#[derive(serde::Serialize, serde::Deserialize, Clone, Debug, Eq, PartialEq)]
 pub struct AgentHandoff {
     pub id: String,
     pub work_item_id: String,
@@ -166,7 +166,7 @@ impl WorkGraph {
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum WorkspaceStatus { Pending, Provisioning, Ready, Running, Sleeping, Recovery, Stopped }
 
-#[derive(Clone, Debug, Eq, PartialEq)]
+#[derive(serde::Serialize, serde::Deserialize, Clone, Debug, Eq, PartialEq)]
 pub struct AgentWorkspace {
     pub id: String,
     pub agent_id: String,
@@ -229,10 +229,11 @@ impl WorkspaceRegistry {
         w.deletion_reserved=true; w.status=WorkspaceStatus::Stopped; Ok(())
     }
     pub fn all(&self)->impl Iterator<Item=&AgentWorkspace>{ self.items.values() }
+    pub fn replace_all(&mut self, items: Vec<AgentWorkspace>) { self.items.clear(); for item in items { self.items.insert(item.id.clone(), item); } }
     pub fn get(&self, agent_id:&str)->Option<&AgentWorkspace>{ self.items.get(&format!("workspace-{agent_id}")) }
 }
 
-#[derive(Clone, Debug, Eq, PartialEq)]
+#[derive(serde::Serialize, serde::Deserialize, Clone, Debug, Eq, PartialEq)]
 pub struct DecisionRecord {
     pub id: String,
     pub agent_id: String,
