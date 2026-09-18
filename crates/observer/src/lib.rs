@@ -31,7 +31,7 @@ pub trait ObserverSource {
     fn observe(&mut self) -> Result<Vec<Observation>, String>;
 }
 
-#[derive(Clone, Debug, Default)]
+#[derive(Default)]
 pub struct ObserverHub {
     sources: Vec<Box<dyn ObserverSource + Send>>,
 }
