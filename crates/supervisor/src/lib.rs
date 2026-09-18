@@ -85,7 +85,7 @@ impl Supervisor {
         }
         service.restarts=service.restarts.saturating_add(1);
         let exponent=service.restarts.saturating_sub(1).min(31);
-        let backoff=self.policy.base_backoff_ms.saturating_mul(1u64.saturating_shl(exponent)).min(self.policy.max_backoff_ms);
+        let backoff=self.policy.base_backoff_ms.saturating_mul(1u64.checked_shl(exponent).unwrap_or(u64::MAX)).min(self.policy.max_backoff_ms);
         service.next_restart_ms=now_ms.saturating_add(backoff as u128);
         service.state=ServiceState::Recovering;
         Ok(true)
