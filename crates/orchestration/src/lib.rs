@@ -143,6 +143,8 @@ pub struct AgentWorkspace {
     pub status: WorkspaceStatus,
     pub budget_cents: i64,
     pub memory_scope: String,
+    pub active_runs: u32,
+    pub deletion_reserved: bool,
 }
 
 #[derive(Clone, Debug, Default)]
@@ -152,12 +154,48 @@ impl WorkspaceRegistry {
     pub fn ensure(&mut self, agent_id: &str, root: impl Into<String>) -> &AgentWorkspace {
         let id=format!("workspace-{agent_id}");
         self.items.entry(id.clone()).or_insert_with(|| AgentWorkspace {
-            id, agent_id: agent_id.into(), root: root.into(), status: WorkspaceStatus::Ready, budget_cents: 0, memory_scope: format!("agent:{agent_id}"),
+            id, agent_id: agent_id.into(), root: root.into(), status: WorkspaceStatus::Ready, budget_cents: 0, memory_scope: format!("agent:{agent_id}"), active_runs: 0, deletion_reserved: false,
         })
     }
-    pub fn set_status(&mut self, agent_id: &str, status: WorkspaceStatus) {
+    pub fn set_status(&mut self, agent_id: &str, status: WorkspaceStatus) -> Result<(), String> {
         let id=format!("workspace-{agent_id}");
-        if let Some(w)=self.items.get_mut(&id) { w.status=status; }
+        let w=self.items.get_mut(&id).ok_or_else(|| "unknown workspace".to_string())?;
+        if w.deletion_reserved { return Err("workspace deletion is reserved".into()); }
+        if w.active_runs>0 && matches!(status,WorkspaceStatus::Stopped|WorkspaceStatus::Pending|WorkspaceStatus::Provisioning) { return Err("workspace has active runs".into()); }
+        let allowed=matches!((w.status,status),
+            (WorkspaceStatus::Pending,WorkspaceStatus::Provisioning) |
+            (WorkspaceStatus::Provisioning,WorkspaceStatus::Ready) |
+            (WorkspaceStatus::Ready,WorkspaceStatus::Running|WorkspaceStatus::Stopped) |
+            (WorkspaceStatus::Running,WorkspaceStatus::Sleeping|WorkspaceStatus::Recovery) |
+            (WorkspaceStatus::Sleeping,WorkspaceStatus::Running|WorkspaceStatus::Recovery|WorkspaceStatus::Stopped) |
+            (WorkspaceStatus::Recovery,WorkspaceStatus::Ready|WorkspaceStatus::Running|WorkspaceStatus::Stopped) |
+            (WorkspaceStatus::Stopped,WorkspaceStatus::Pending|WorkspaceStatus::Provisioning));
+        if !allowed && w.status!=status { return Err(format!("invalid workspace transition {:?} -> {:?}",w.status,status)); }
+        w.status=status;
+        Ok(())
+    }
+    pub fn begin_run(&mut self, agent_id:&str)->Result<(),String>{
+        let id=format!("workspace-{agent_id}");
+        let w=self.items.get_mut(&id).ok_or_else(|| "unknown workspace".to_string())?;
+        if w.deletion_reserved { return Err("workspace deletion is reserved".into()); }
+        if matches!(w.status,WorkspaceStatus::Pending|WorkspaceStatus::Provisioning|WorkspaceStatus::Stopped) { return Err("workspace is not executable".into()); }
+        w.status=WorkspaceStatus::Running;
+        w.active_runs=w.active_runs.saturating_add(1);
+        Ok(())
+    }
+    pub fn finish_run(&mut self, agent_id:&str)->Result<(),String>{
+        let id=format!("workspace-{agent_id}");
+        let w=self.items.get_mut(&id).ok_or_else(|| "unknown workspace".to_string())?;
+        if w.active_runs==0 { return Err("workspace has no active run".into()); }
+        w.active_runs-=1;
+        if w.active_runs==0 && !w.deletion_reserved { w.status=WorkspaceStatus::Ready; }
+        Ok(())
+    }
+    pub fn reserve_deletion(&mut self, agent_id:&str)->Result<(),String>{
+        let id=format!("workspace-{agent_id}");
+        let w=self.items.get_mut(&id).ok_or_else(|| "unknown workspace".to_string())?;
+        if w.active_runs>0 { return Err("cannot reserve deletion while runs are active".into()); }
+        w.deletion_reserved=true; w.status=WorkspaceStatus::Stopped; Ok(())
     }
     pub fn all(&self)->impl Iterator<Item=&AgentWorkspace>{ self.items.values() }
     pub fn get(&self, agent_id:&str)->Option<&AgentWorkspace>{ self.items.get(&format!("workspace-{agent_id}")) }
@@ -194,6 +232,6 @@ mod tests {
     fn node(id:&str)->WorkNode{WorkNode{id:id.into(),label:id.into(),agent_id:None,kind:NodeKind::Agent,class:DecisionClass::ReadOnly}}
     #[test] fn graph_blocks_cycles(){let mut g=WorkGraph::default();g.add_node(node("a")).unwrap();g.add_node(node("b")).unwrap();g.connect("a","b",4).unwrap();assert!(g.connect("b","a",4).is_err());}
     #[test] fn work_item_handoff(){let mut g=WorkGraph::default();g.add_node(node("a")).unwrap();g.add_node(node("b")).unwrap();g.connect("a","b",4).unwrap();let mut w=g.start_item("w1","telegram","payload:1","a").unwrap();g.advance(&mut w,"b").unwrap();assert_eq!(w.hops,1);}
-    #[test] fn workspace_lifecycle(){let mut r=WorkspaceRegistry::default();r.ensure("agent-01",".");r.set_status("agent-01",WorkspaceStatus::Running);assert_eq!(r.get("agent-01").unwrap().status,WorkspaceStatus::Running);}
+    #[test] fn workspace_lifecycle(){let mut r=WorkspaceRegistry::default();r.ensure("agent-01",".");r.begin_run("agent-01").unwrap();assert_eq!(r.get("agent-01").unwrap().status,WorkspaceStatus::Running);assert_eq!(r.get("agent-01").unwrap().active_runs,1);r.finish_run("agent-01").unwrap();assert_eq!(r.get("agent-01").unwrap().status,WorkspaceStatus::Ready);}
     #[test] fn decision_closes(){let mut d=DecisionRecord::new("d1","agent-03","hyp","act");d.close("actual","better","keep evidence");assert!(d.actual_outcome.is_some());}
 }
