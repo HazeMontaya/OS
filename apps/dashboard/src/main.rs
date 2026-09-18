@@ -1,7 +1,56 @@
 use os_events::Event;
 use os_runtime::Runtime;
+use std::collections::BTreeSet;
 use std::io::{Read, Write};
 use std::net::{TcpListener, TcpStream};
+
+
+fn form_value(body:&str,key:&str)->Option<String>{
+    fn decode(value:&str)->String{
+        let mut out=String::new();
+        let bytes=value.as_bytes();
+        let mut i=0;
+        while i<bytes.len(){
+            match bytes[i]{
+                b'+' => { out.push(' '); i+=1; }
+                b'%' if i+2<bytes.len() => {
+                    let hi=(bytes[i+1] as char).to_digit(16);
+                    let lo=(bytes[i+2] as char).to_digit(16);
+                    if let (Some(hi),Some(lo))=(hi,lo){ out.push((hi*16+lo) as u8 as char); i+=3; } else { out.push('%'); i+=1; }
+                }
+                _ => { out.push(bytes[i] as char); i+=1; }
+            }
+        }
+        out
+    }
+    body.split('&').find_map(|pair|{
+        let (k,v)=pair.split_once('=')?;
+        (k==key).then(||decode(v))
+    })
+}
+fn parse_goal_action(value:&str)->Option<os_orchestration::GoalAction>{
+    match value{
+        "observe_system"=>Some(os_orchestration::GoalAction::ObserveSystem),
+        "verify_runtime"=>Some(os_orchestration::GoalAction::VerifyRuntime),
+        "advance_revenue"=>Some(os_orchestration::GoalAction::AdvanceRevenue),
+        "research"=>Some(os_orchestration::GoalAction::Research),
+        "build"=>Some(os_orchestration::GoalAction::Build),
+        "test"=>Some(os_orchestration::GoalAction::Test),
+        "review"=>Some(os_orchestration::GoalAction::Review),
+        _=>None
+    }
+}
+fn parse_goal_status(value:&str)->Option<os_orchestration::GoalStatus>{
+    match value{
+        "proposed"=>Some(os_orchestration::GoalStatus::Proposed),
+        "active"=>Some(os_orchestration::GoalStatus::Active),
+        "blocked"=>Some(os_orchestration::GoalStatus::Blocked),
+        "completed"=>Some(os_orchestration::GoalStatus::Completed),
+        "failed"=>Some(os_orchestration::GoalStatus::Failed),
+        "cancelled"=>Some(os_orchestration::GoalStatus::Cancelled),
+        _=>None
+    }
+}
 
 fn json_escape(s: &str) -> String {
     s.replace('\\', "\\\\").replace('"', "\\\"").replace('\n', "\\n").replace('\r', "\\r")
@@ -102,6 +151,30 @@ fn handle(mut stream: TcpStream, rt: &mut Runtime, index: &str) {
     let method = parts.next().unwrap_or("");
     let path = parts.next().unwrap_or("/");
     match (method, path) {
+        ("POST", "/api/goals") => {
+            let body=request.split("\r\n\r\n").nth(1).unwrap_or("");
+            let id=form_value(body,"id").unwrap_or_else(||format!("goal:{}",rt.goals.goals.len()+1));
+            let title=form_value(body,"title").unwrap_or_else(||"Untitled goal".into());
+            let description=form_value(body,"description").unwrap_or_default();
+            let action=form_value(body,"action").and_then(|v|parse_goal_action(&v));
+            let agent=form_value(body,"agent").unwrap_or_else(||"agent-02".into());
+            let deps=form_value(body,"depends_on").unwrap_or_default().split(',').map(str::trim).filter(|v|!v.is_empty()).map(str::to_owned).collect::<BTreeSet<_>>();
+            let result=match action{Some(action)=>rt.create_task_goal(id,title,description,action,agent,deps),None=>Err("invalid or missing goal action".into())};
+            match result{
+                Ok(())=>response(&mut stream,"201 Created","application/json","{"ok":true}"),
+                Err(error)=>response(&mut stream,"400 Bad Request","application/json",&format!("{{"ok":false,"error":"{}"}}",json_escape(&error))),
+            }
+        },
+        ("POST", "/api/goals/status") => {
+            let body=request.split("\r\n\r\n").nth(1).unwrap_or("");
+            let id=form_value(body,"id").unwrap_or_default();
+            let status=form_value(body,"status").and_then(|v|parse_goal_status(&v));
+            let result=match status{Some(status)=>rt.set_goal_status(&id,status),None=>Err("invalid or missing goal status".into())};
+            match result{
+                Ok(())=>response(&mut stream,"200 OK","application/json","{"ok":true}"),
+                Err(error)=>response(&mut stream,"400 Bad Request","application/json",&format!("{{"ok":false,"error":"{}"}}",json_escape(&error))),
+            }
+        },
         ("GET", "/api/state") => response(&mut stream, "200 OK", "application/json", &state_json(rt)),
         ("GET", "/api/agents") => response(&mut stream, "200 OK", "application/json", &format!("[{}]", agents_json(rt))),
         ("GET", "/api/workflow") => response(&mut stream, "200 OK", "application/json", &workflow_json(rt)),
