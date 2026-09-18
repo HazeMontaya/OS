@@ -94,6 +94,19 @@ impl Runtime{
   }
   Err(last_error.unwrap_or_else(||ModelError::Unavailable("all model candidates failed".into())))
  }
+ pub fn agent_execution_context(&self, agent_id:&str) -> Result<ExecutionContext,String> {
+  let workspace=self.workspaces.get(agent_id).ok_or_else(|| format!("unknown workspace for agent {agent_id}"))?;
+  let base=self.context.workspace_root.clone();
+  let root=PathBuf::from(&workspace.root);
+  let root=if root.is_absolute() { root } else { base.join(root) };
+  std::fs::create_dir_all(&root).map_err(|e| format!("cannot provision workspace {}: {e}", workspace.id))?;
+  Ok(ExecutionContext{
+    workspace_root:root,
+    allowed_commands:self.context.allowed_commands.clone(),
+    command_timeout:self.context.command_timeout,
+    max_output_bytes:self.context.max_output_bytes,
+  })
+ }
  pub fn queue_task(&mut self,agent:impl Into<String>,class:DecisionClass,cost:i64,tool:ToolRequest,approval:bool){self.pending_tasks.push(QueuedTask{agent:agent.into(),class,cost:cost.max(0),tool,approval,goal_id:None});}
  pub fn execute_next_queued_task(&mut self)->Option<ExecutionResult>{
      let task=self.pending_tasks.first()?.clone();
@@ -119,7 +132,17 @@ impl Runtime{
    }
    self.events.push(Event::TaskQueued{task_id:task.id.clone(),agent:task.agent.clone()});
    self.events.push(Event::TaskStarted{task_id:task.id.clone()});self.events.push(Event::ToolCalled{task_id:task.id.clone(),tool:task.tool.name().into()});
-   let result=self.execution.execute(&task,&self.context,planned);
+   let context=match self.agent_execution_context(&task.agent) {
+    Ok(context)=>context,
+    Err(reason)=>{
+      let _=self.workspaces.finish_run(&task.agent);
+      decision.close("blocked",reason.clone(),"repair or reprovision the agent workspace before retry");
+      self.decisions.push(decision);
+      self.events.push(Event::TaskBlocked{task_id:task.id.clone(),reason});
+      return ExecutionResult{task_id:task.id.clone(),decision:Decision::Deny,status:TaskStatus::Blocked,message:"agent workspace could not be provisioned".into(),output:None};
+    }
+   };
+   let result=self.execution.execute(&task,&context,planned);
    let _=self.workspaces.finish_run(&task.agent);
    if let Some(item)=self.work_items.last_mut(){ self.work_graph.terminal(item,result.status==TaskStatus::Completed); }
    decision.close(if result.status==TaskStatus::Completed {"completed"} else {"failed"},result.message.clone(),if result.status==TaskStatus::Completed {"reuse successful procedure"} else {"inspect failure before retry"});
@@ -371,6 +394,8 @@ fn parse_stage(s:&str)->Option<os_revenue::RevenueStage>{match s{"Discovered"=>S
  #[test]fn queued_task_recovers(){let path=std::env::temp_dir().join(format!("haze-queue-{}.tsv",std::process::id()));let mut r=Runtime::new(100_000);r.queue_task("agent-04",DecisionClass::ReadOnly,0,ToolRequest::RunCommand{program:"rustc".into(),args:vec!["--version".into(),"--verbose".into()]},false);r.save_state(&path).unwrap();let mut n=Runtime::new(1);n.load_state(&path).unwrap();assert_eq!(n.pending_tasks.len(),1);assert_eq!(n.pending_tasks[0].agent,"agent-04");assert_eq!(n.pending_tasks[0].tool.name(),"run_command");let _=std::fs::remove_file(path);}
  #[test]fn readonly_executes_real_tool(){let mut r=Runtime::new(100_000);r.context.workspace_root=std::env::temp_dir();let result=r.submit_task("agent-02",DecisionClass::ReadOnly,0,ToolRequest::ReadFile{path:PathBuf::from("haze-os-runtime-test.txt")},false);assert_eq!(result.status,TaskStatus::Failed);assert!(r.snapshot().events>=4);
 }
+ #[test]fn agent_workspace_context_isolated(){let base=std::env::temp_dir().join(format!("haze-agent-context-{}",std::process::id()));std::fs::create_dir_all(&base).unwrap();let mut r=Runtime::new(100_000);r.context.workspace_root=base.clone();let context=r.agent_execution_context("agent-04").unwrap();assert_eq!(context.workspace_root,base.join("workspaces/agent-04"));assert!(context.workspace_root.is_dir());assert_ne!(context.workspace_root,base);let _=std::fs::remove_dir_all(base);}
+
 }
 
 fn default_work_graph(agents:&[Agent])->WorkGraph {
