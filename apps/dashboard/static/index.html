@@ -87,12 +87,13 @@ background-size:48px 48px,48px 48px,auto;box-shadow:inset 0 0 80px rgba(0,0,0,.3
 .stage{flex:1;min-width:0;border:1px solid var(--line);border-radius:8px;padding:8px;background:#0c1219}
 .stage b{display:block;font-size:9px;color:#7f8ea0;text-transform:uppercase;letter-spacing:.12em}.stage span{display:block;margin-top:5px;font-size:11px;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .stage.on{border-color:#2d5966;background:#0e1b22}.stage.on b,.stage.on span{color:var(--cyan)}
-.bottom{display:grid;grid-template-columns:minmax(0,1.1fr) minmax(0,.9fr);gap:10px;min-height:0}
+.bottom{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr) minmax(0,1fr);gap:10px;min-height:0}
 .runs,.events{min-height:0}
 .run-grid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:6px}
 .run{padding:8px;border:1px solid var(--line);border-radius:8px;background:#0c1219}
 .run .line{display:flex;justify-content:space-between;gap:6px}.run .name{font-weight:600;font-size:11px}.run .time{color:#657284;font:9px ui-monospace,monospace}
 .track{height:4px;background:#17202a;border-radius:99px;margin-top:8px;overflow:hidden}.fill{height:100%;width:72%;background:linear-gradient(90deg,#24596a,var(--cyan))}
+.goal-list{height:156px;overflow:auto}.goal-row{padding:6px 0;border-bottom:1px solid #151d27}.goal-row b{font-size:10px}.goal-row span{display:block;color:#748397;font-size:9px;margin-top:2px}.goal-state{float:right;font:9px ui-monospace,monospace;color:var(--cyan)}
 .event-list{height:156px;overflow:auto;font:10px ui-monospace,SFMono-Regular,Consolas,monospace;color:#94a5b7}
 .event-row{padding:5px 0;border-bottom:1px solid #151d27}.event-row b{color:#dfe7ed}
 @media(max-width:1180px){.app{grid-template-columns:190px 1fr}.metrics{grid-template-columns:repeat(3,1fr)}.workspace{grid-template-columns:1fr}.inspector{display:none}.bottom{grid-template-columns:1fr 1fr}}
@@ -201,6 +202,10 @@ background-size:48px 48px,48px 48px,auto;box-shadow:inset 0 0 80px rgba(0,0,0,.3
         <div class="run"><div class="line"><span class="name">Maintenance</span><span class="time">idle</span></div><div class="track"><div class="fill" style="width:24%"></div></div></div>
       </div>
     </section>
+    <section class="panel">
+      <h3>Goal plan</h3>
+      <div class="goal-list" id="goals"></div>
+    </section>
     <section class="panel events">
       <h3>Live event timeline</h3>
       <div class="event-list" id="log"></div>
@@ -235,7 +240,12 @@ function render(s,models,system){
   }
   document.querySelector('#lastAction').textContent=recent[0]||'waiting';
 }
-async function state(){const [a,b,d]=await Promise.all([fetch('/api/state'),fetch('/api/models'),fetch('/api/system')]);if(!a.ok||!b.ok||!d.ok)throw new Error('runtime state unavailable');render(await a.json(),await b.json(),await d.json())}
+async function state(){
+  const [a,b,d,g]=await Promise.all([fetch('/api/state'),fetch('/api/models'),fetch('/api/system'),fetch('/api/goals')]);
+  if(!a.ok||!b.ok||!d.ok||!g.ok)throw new Error('runtime state unavailable');
+  const goals=await g.json(); render(await a.json(),await b.json(),await d.json());
+  document.querySelector('#goals').innerHTML=goals.map(x=>'<div class="goal-row"><span class="goal-state">'+esc(x.status)+'</span><b>'+esc(x.title)+'</b><span>'+esc(x.kind)+' · '+esc(x.action||'mission')+' · '+esc(x.owner_agent||'core')+'</span></div>').join('');
+}
 async function tick(){const r=await fetch('/api/tick',{method:'POST'});const x=await r.json();document.querySelector('#lastAction').textContent=x.summary||x.kind;await state()}
 function toggle(){const b=document.querySelector('#auto');if(timer){clearInterval(timer);timer=null;b.textContent='Auto: off'}else{timer=setInterval(()=>tick().catch(()=>{}),5000);b.textContent='Auto: on';tick().catch(()=>{})}}
 document.querySelectorAll('.agent').forEach(el=>el.addEventListener('click',()=>{document.querySelector('#sel').textContent=el.querySelector('.role').textContent}));
