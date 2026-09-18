@@ -11,4 +11,5 @@ dependencies = {
   os-execution = { path = "../execution" },
   os-events = { path = "../events" },
   os-memory = { path = "../memory" },
+  os-planner = { path = "../planner" },
 }
