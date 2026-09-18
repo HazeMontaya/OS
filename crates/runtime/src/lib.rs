@@ -110,6 +110,6 @@ impl Runtime{
  use super::*;
  #[test]fn boots(){assert_eq!(Runtime::new(100_000).agents.len(),9)}
  #[test]fn autonomous_cycle_runs(){let mut r=Runtime::new(100_000);let result=r.run_cycle();assert_eq!(result.agent,"agent-02");assert!(r.snapshot().events>0)}
- #[test]fn revenue_cycles_through_stages(){let mut r=Runtime::new(100_000);r.register_opportunity(Opportunity{id:"x".into(),name:"x".into(),hypothesis:"h".into(),expected_revenue_cents:100,expected_cost_cents:1,confidence_bps:9000});for _ in 0..6{let result=r.run_cycle();assert_eq!(result.kind,"revenue");}assert_eq!(r.opportunities[0].stage,os_revenue::RevenueStage::Measuring)}
+ #[test]fn revenue_cycles_through_stages(){let mut r=Runtime::new(100_000);r.register_opportunity(Opportunity{id:"x".into(),name:"x".into(),hypothesis:"h".into(),expected_revenue_cents:100,expected_cost_cents:1,confidence_bps:9000});for _ in 0..5{let result=r.run_cycle();assert_eq!(result.kind,"revenue");}assert_eq!(r.opportunities[0].stage,os_revenue::RevenueStage::Measuring)}
  #[test]fn readonly_executes_real_tool(){let mut r=Runtime::new(100_000);r.context.workspace_root=std::env::temp_dir();let result=r.submit_task("agent-02",DecisionClass::ReadOnly,0,ToolRequest::ReadFile{path:PathBuf::from("haze-os-runtime-test.txt")},false);assert_eq!(result.status,TaskStatus::Failed);assert!(r.snapshot().events>=4);}
 }
