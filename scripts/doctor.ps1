@@ -39,3 +39,11 @@ $env:CARGO_INCREMENTAL = "0"
 cargo test --workspace
 Write-Host ""
 Write-Host "Doctor complete." -ForegroundColor Green
+
+
+Write-Host "Checking runtime configuration..."
+$required = @("OS_MODEL_PROVIDER","OS_MODEL","OS_HEARTBEAT_SECONDS","OS_WORKSPACE_ROOT")
+foreach ($name in $required) {
+  $line = Get-Content .env -ErrorAction SilentlyContinue | Where-Object { $_ -match "^$name=" }
+  if ($line) { Write-Host "[OK] $name" } else { Write-Host "[WARN] $name not set in .env" }
+}
