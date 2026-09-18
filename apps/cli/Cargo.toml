@@ -2,4 +2,4 @@
 name = "os-cli"
 version = "0.1.0"
 edition = "2021"
-dependencies = { os-runtime = { path = "../../crates/runtime" } }
+dependencies = { os-runtime = { path = "../../crates/runtime" }, os-governance = { path = "../../crates/governance" }, os-revenue = { path = "../../crates/revenue" }, os-execution = { path = "../../crates/execution" } }
