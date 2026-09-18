@@ -170,7 +170,8 @@ impl Runtime{
  }
  pub fn load_state(&mut self, path: impl AsRef<std::path::Path>) -> std::io::Result<()> {
      use std::io::{BufRead,BufReader};
-     let file=match std::fs::File::open(path){Ok(f)=>f,Err(e) if e.kind()==std::io::ErrorKind::NotFound=>return Ok(()),Err(e)=>return Err(e)};
+     let state_path=path.as_ref().to_path_buf();
+     let file=match std::fs::File::open(&state_path){Ok(f)=>f,Err(e) if e.kind()==std::io::ErrorKind::NotFound=>return Ok(()),Err(e)=>return Err(e)};
      for line in BufReader::new(file).lines() {
          let line=line?; let mut p=line.split('\t');
          match p.next().unwrap_or("") {
@@ -190,7 +191,7 @@ impl Runtime{
              _ => {}
          }
      }
-     self.system_model=SystemModel::load_json(path.as_ref().with_extension("system.json"))?;
+     self.system_model=SystemModel::load_json(state_path.with_extension("system.json"))?;
      let orchestration_path=path.as_ref().with_extension("orchestration.json");
      if let Ok(data)=std::fs::read(&orchestration_path) { if let Ok(orchestration)=serde_json::from_slice::<PersistedOrchestrationState>(&data) { self.work_items=orchestration.work_items; self.workspaces.replace_all(orchestration.workspaces); self.decisions=orchestration.decisions; } }
      Ok(())
