@@ -37,5 +37,5 @@ fn unix_seconds()->u64{std::time::SystemTime::now().duration_since(std::time::UN
 #[cfg(test)]mod tests{
  use super::*;
  #[test]fn stores_and_reads_recent_memory(){let mut m=Memory::default();m.remember("agent-1","observation","hello");m.remember("agent-2","observation","world");assert_eq!(m.recent(1)[0].content,"world")}
- #[test]fn journal_roundtrip(){let path=std::env::temp_dir().join(format!("haze-memory-{}.log",std::process::id()));let mut m=Memory::default();m.remember("agent-1","note","hello\nworld");m.append_journal(&path).unwrap();let loaded=Memory::load_journal(&path).unwrap();assert_eq!(loaded.all()[0],m.all()[0]);let _=std::fs::remove_file(path)}
+ #[test]fn journal_roundtrip(){let path=std::env::temp_dir().join(format!("haze-memory-{}.log",std::process::id()));let mut m=Memory::default();m.remember("agent-1","note","hello\nworld");m.append_journal(&path).unwrap();let loaded=Memory::load_journal(&path).unwrap();assert_eq!(loaded.all()[0],m.all()[0]);let _=std::fs::remove_file(path);}
 }
