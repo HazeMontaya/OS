@@ -29,3 +29,6 @@ cargo test --workspace
 ## Safety boundary
 
 This repository does not contain unrestricted payment authority, destructive host control, autonomous self-replication, or unrestricted self-modification. External capabilities are explicit and auditable.
+
+
+<!-- CI verification branch -->
