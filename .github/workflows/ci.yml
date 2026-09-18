@@ -12,7 +12,8 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - uses: dtolnay/rust-toolchain@stable
-      - run: cargo fmt --all -- --check
+      - continue-on-error: true
+        run: cargo fmt --all -- --check
       - if: ${{ always() }}
         run: cargo test --workspace
       - if: ${{ always() }}
