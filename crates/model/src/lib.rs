@@ -146,3 +146,84 @@ mod router_tests {
         assert!(r.route(1, None).is_err());
     }
 }
+
+
+#[derive(Clone, Debug)]
+pub struct OpenAiCompatibleProvider {
+    pub endpoint: String,
+    pub api_key: String,
+    pub model: String,
+}
+
+impl OpenAiCompatibleProvider {
+    pub fn from_env(config: &EnvModelConfig) -> Result<Self, ModelError> {
+        let endpoint = config.endpoint.clone().unwrap_or_else(|| {
+            if config.provider.eq_ignore_ascii_case("omniroute") {
+                "http://127.0.0.1:20128/v1/chat/completions".into()
+            } else {
+                "https://api.openai.com/v1/chat/completions".into()
+            }
+        });
+        let env_name = config.api_key_env.clone().unwrap_or_else(|| {
+            if config.provider.eq_ignore_ascii_case("omniroute") {
+                "OMNIROUTE_API_KEY".into()
+            } else {
+                "OPENAI_API_KEY".into()
+            }
+        });
+        let api_key = std::env::var(&env_name)
+            .map_err(|_| ModelError::Unavailable(format!("missing API key environment variable: {env_name}")))?;
+        Ok(Self { endpoint, api_key, model: config.model.clone() })
+    }
+}
+
+impl ModelProvider for OpenAiCompatibleProvider {
+    fn complete(&self, request: &ModelRequest) -> Result<ModelResponse, ModelError> {
+        let body = serde_json::json!({
+            "model": self.model,
+            "messages": [
+                {"role":"system","content":request.system},
+                {"role":"user","content":request.prompt}
+            ],
+            "max_tokens": request.max_tokens,
+            "temperature": request.temperature
+        });
+        let response = reqwest::blocking::Client::new()
+            .post(&self.endpoint)
+            .bearer_auth(&self.api_key)
+            .json(&body)
+            .send()
+            .map_err(|e| ModelError::Unavailable(e.to_string()))?;
+        let status=response.status();
+        let value:serde_json::Value=response.json()
+            .map_err(|e|ModelError::InvalidResponse(e.to_string()))?;
+        if !status.is_success() {
+            return Err(ModelError::InvalidResponse(value.to_string()));
+        }
+        let text=value.pointer("/choices/0/message/content").and_then(|v|v.as_str())
+            .ok_or_else(||ModelError::InvalidResponse("compatible response contained no choices[0].message.content".into()))?;
+        let usage_tokens=value.pointer("/usage/total_tokens").and_then(|v|v.as_u64()).unwrap_or(0) as usize;
+        Ok(ModelResponse{text:text.into(),model:self.model.clone(),usage_tokens})
+    }
+}
+
+impl ModelRouter {
+    pub fn route_for_task(&self, kind: &str, min_quota_tokens: usize, max_latency_ms: Option<u32>) -> Result<RoutingDecision, ModelError> {
+        let decision=self.route(min_quota_tokens,max_latency_ms)?;
+        let reason=format!("task={kind}; {}",decision.reason);
+        Ok(RoutingDecision { reason, ..decision })
+    }
+}
+
+#[cfg(test)]
+mod compatible_tests {
+    use super::*;
+
+    #[test]
+    fn omniroute_defaults_to_local_gateway() {
+        std::env::remove_var("OMNIROUTE_API_KEY");
+        let config=EnvModelConfig { provider:"omniroute".into(), model:"demo".into(), endpoint:None, api_key_env:None, metadata:BTreeMap::new() };
+        let result=OpenAiCompatibleProvider::from_env(&config);
+        assert!(matches!(result,Err(ModelError::Unavailable(message)) if message.contains("OMNIROUTE_API_KEY")));
+    }
+}
