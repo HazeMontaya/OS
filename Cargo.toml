@@ -11,4 +11,5 @@ members = [
   "crates/memory",
   "crates/runtime",
   "apps/cli",
+  "apps/dashboard",
 ]
