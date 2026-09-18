@@ -1,0 +1,10 @@
+[package]
+name = "os-revenue"
+version.workspace = true
+edition.workspace = true
+publish = false
+
+[dependencies]
+os-economy = { path = "../economy" }
+serde.workspace = true
+uuid.workspace = true
