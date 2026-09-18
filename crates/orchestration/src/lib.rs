@@ -1,6 +1,101 @@
 use os_governance::DecisionClass;
 use std::collections::{BTreeMap, BTreeSet};
 
+#[derive(serde::Serialize, serde::Deserialize, Clone, Copy, Debug, Eq, PartialEq)]
+pub enum GoalStatus {
+    Proposed,
+    Active,
+    Blocked,
+    Completed,
+    Failed,
+    Cancelled,
+}
+
+#[derive(serde::Serialize, serde::Deserialize, Clone, Debug, Eq, PartialEq)]
+pub struct Goal {
+    pub id: String,
+    pub title: String,
+    pub description: String,
+    pub status: GoalStatus,
+    pub parent_id: Option<String>,
+    pub depends_on: BTreeSet<String>,
+}
+
+#[derive(serde::Serialize, serde::Deserialize, Clone, Debug, Default)]
+pub struct GoalGraph {
+    pub goals: BTreeMap<String, Goal>,
+}
+
+impl GoalGraph {
+    pub fn add_goal(&mut self, goal: Goal) -> Result<(), String> {
+        if goal.id.trim().is_empty() || goal.title.trim().is_empty() {
+            return Err("goal id and title are required".into());
+        }
+        if self.goals.contains_key(&goal.id) {
+            return Err("duplicate goal".into());
+        }
+        if goal.depends_on.contains(&goal.id) {
+            return Err("goal cannot depend on itself".into());
+        }
+        if goal.depends_on.iter().any(|id| !self.goals.contains_key(id)) {
+            return Err("goal dependency references unknown goal".into());
+        }
+        self.goals.insert(goal.id.clone(), goal);
+        if self.has_cycle() {
+            self.goals.remove(self.goals.keys().next_back().expect("goal inserted").as_str());
+            return Err("goal dependency cycle is blocked".into());
+        }
+        Ok(())
+    }
+
+    pub fn ready(&self) -> Vec<&Goal> {
+        self.goals.values()
+            .filter(|goal| matches!(goal.status, GoalStatus::Proposed | GoalStatus::Active))
+            .filter(|goal| goal.depends_on.iter().all(|id| self.goals.get(id).map(|g| g.status == GoalStatus::Completed).unwrap_or(false) || goal.depends_on.is_empty()))
+            .collect()
+    }
+
+    pub fn set_status(&mut self, id: &str, status: GoalStatus) -> Result<(), String> {
+        let goal=self.goals.get_mut(id).ok_or_else(|| "unknown goal".to_string())?;
+        goal.status=status;
+        Ok(())
+    }
+
+    pub fn dependency_path(&self, id: &str) -> Vec<String> {
+        let mut out=Vec::new();
+        let mut stack=vec![id.to_string()];
+        let mut seen=BTreeSet::new();
+        while let Some(cur)=stack.pop() {
+            if !seen.insert(cur.clone()) { continue; }
+            out.push(cur.clone());
+            if let Some(goal)=self.goals.get(&cur) {
+                stack.extend(goal.depends_on.iter().cloned());
+            }
+        }
+        out
+    }
+
+    fn has_cycle(&self) -> bool {
+        fn visit(id:&str, graph:&GoalGraph, visiting:&mut BTreeSet<String>, visited:&mut BTreeSet<String>) -> bool {
+            if visiting.contains(id) { return true; }
+            if visited.contains(id) { return false; }
+            visiting.insert(id.to_string());
+            if let Some(goal)=graph.goals.get(id) {
+                for dep in &goal.depends_on {
+                    if visit(dep,graph,visiting,visited) { return true; }
+                }
+            }
+            visiting.remove(id);
+            visited.insert(id.to_string());
+            false
+        }
+        let mut visiting=BTreeSet::new();
+        let mut visited=BTreeSet::new();
+        self.goals.keys().any(|id| visit(id,self,&mut visiting,&mut visited))
+    }
+}
+
+
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum NodeKind {
     Trigger,
@@ -262,6 +357,7 @@ impl DecisionRecord {
 mod tests {
     use super::*;
     fn node(id:&str)->WorkNode{WorkNode{id:id.into(),label:id.into(),agent_id:None,kind:NodeKind::Agent,class:DecisionClass::ReadOnly}}
+    #[test] fn goal_graph_enforces_dependencies(){let mut g=GoalGraph::default();g.add_goal(Goal{id:"a".into(),title:"A".into(),description:"".into(),status:GoalStatus::Proposed,parent_id:None,depends_on:BTreeSet::new()}).unwrap();let mut deps=BTreeSet::new();deps.insert("a".into());g.add_goal(Goal{id:"b".into(),title:"B".into(),description:"".into(),status:GoalStatus::Proposed,parent_id:None,depends_on:deps}).unwrap();assert_eq!(g.ready().len(),1);g.set_status("a",GoalStatus::Completed).unwrap();assert_eq!(g.ready()[0].id,"b");}
     #[test] fn graph_blocks_cycles(){let mut g=WorkGraph::default();g.add_node(node("a")).unwrap();g.add_node(node("b")).unwrap();g.connect("a","b",4).unwrap();assert!(g.connect("b","a",4).is_err());}
     #[test] fn work_item_handoff(){let mut g=WorkGraph::default();g.add_node(node("a")).unwrap();g.add_node(node("b")).unwrap();g.connect("a","b",4).unwrap();let mut w=g.start_item("w1","telegram","payload:1","a").unwrap();let h=g.handoff(&mut w,"b","handoff-1").unwrap();assert_eq!(w.hops,1);assert_eq!(h.from_agent,"a");assert_eq!(h.to_agent,"b");}
     #[test] fn workspace_lifecycle(){let mut r=WorkspaceRegistry::default();r.ensure("agent-01",".");r.begin_run("agent-01").unwrap();assert_eq!(r.get("agent-01").unwrap().status,WorkspaceStatus::Running);assert_eq!(r.get("agent-01").unwrap().active_runs,1);r.finish_run("agent-01").unwrap();assert_eq!(r.get("agent-01").unwrap().status,WorkspaceStatus::Ready);}
