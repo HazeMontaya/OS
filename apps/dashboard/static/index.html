@@ -3,53 +3,239 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
-<title>HazeMontaya OS — Agent World</title>
+<title>HazeMontaya OS — Mission Control</title>
 <style>
-:root{--bg:#071018;--panel:#0d1822;--line:#1c3344;--text:#e8f1f7;--muted:#8da4b4;--accent:#65d4ff;--ok:#6ee7a8;--warn:#ffd166}
-*{box-sizing:border-box}body{margin:0;background:radial-gradient(circle at 50% 20%,#122b3b 0,#071018 55%);color:var(--text);font:14px system-ui,sans-serif}
-header{padding:22px 28px;border-bottom:1px solid var(--line);display:flex;justify-content:space-between;align-items:center}
-h1{font-size:20px;margin:0}button{background:#102b3b;border:1px solid #2a5369;color:var(--text);padding:9px 14px;border-radius:8px;cursor:pointer}button:hover{border-color:var(--accent)}
-main{display:grid;grid-template-columns:1fr 360px;gap:18px;padding:18px;max-width:1500px;margin:auto}
-#world{min-height:680px;border:1px solid var(--line);border-radius:14px;background:linear-gradient(145deg,#0b1923,#08131b);position:relative;overflow:hidden}
-.floor{position:absolute;inset:12% 5% 6%;border:1px solid #234355;border-radius:18px;transform:perspective(800px) rotateX(48deg);background:repeating-linear-gradient(90deg,transparent 0 59px,#102a38 60px),repeating-linear-gradient(0deg,transparent 0 59px,#102a38 60px)}
-.agent{position:absolute;width:92px;padding:10px 6px;text-align:center;border:1px solid #31576b;border-radius:10px;background:#10212c;box-shadow:0 8px 24px #0008}
-.dot{width:12px;height:12px;border-radius:50%;background:var(--accent);margin:0 auto 5px;box-shadow:0 0 15px #65d4ff}
-#side{display:flex;flex-direction:column;gap:12px}.panel{background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:15px}.grid{display:grid;grid-template-columns:1fr 1fr;gap:10px}.metric{font-size:22px;font-weight:700}.label{color:var(--muted);font-size:12px}.log{max-height:310px;overflow:auto;font:12px ui-monospace,monospace;color:#b8ccd8}.stage{color:var(--ok)}
-@media(max-width:900px){main{grid-template-columns:1fr}#world{min-height:520px}}
+:root{
+  --bg:#07090d;--panel:#0d1118;--panel2:#101620;--panel3:#141b26;
+  --line:#202a38;--line2:#2a3647;--text:#edf3f8;--muted:#8290a3;
+  --cyan:#6fe7ff;--cyan2:#2bc6e9;--green:#68e0a5;--amber:#f0c36a;--red:#f67f8c;
+  --shadow:0 18px 50px rgba(0,0,0,.38);
+}
+*{box-sizing:border-box}
+html,body{height:100%}
+body{margin:0;background:
+ radial-gradient(circle at 80% -10%,rgba(48,123,160,.12),transparent 30%),
+ radial-gradient(circle at 20% 15%,rgba(63,89,126,.09),transparent 28%),
+ var(--bg);color:var(--text);font:13px/1.4 Inter,ui-sans-serif,system-ui,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;overflow:hidden}
+button{font:inherit;color:inherit;background:none;border:0}
+.app{display:grid;grid-template-columns:220px 1fr;grid-template-rows:64px 1fr;height:100%}
+.sidebar{grid-row:1/3;border-right:1px solid var(--line);background:rgba(8,11,16,.94);padding:14px 12px;display:flex;flex-direction:column;gap:16px}
+.brand{display:flex;align-items:center;gap:10px;padding:6px 8px 12px}
+.logo{width:28px;height:28px;border:1px solid #355467;border-radius:8px;display:grid;place-items:center;background:linear-gradient(145deg,#132330,#091016);box-shadow:0 0 22px rgba(111,231,255,.1)}
+.logo:after{content:"";width:10px;height:10px;border-radius:50%;background:var(--cyan);box-shadow:0 0 14px var(--cyan)}
+.brand b{font-size:14px;letter-spacing:.02em}
+.brand small{display:block;color:var(--muted);font-size:10px;letter-spacing:.14em;text-transform:uppercase}
+.section-label{padding:0 9px;color:#5f6b7b;font-size:10px;text-transform:uppercase;letter-spacing:.14em}
+.nav{display:flex;flex-direction:column;gap:4px}
+.nav button{display:flex;justify-content:space-between;align-items:center;padding:9px 10px;border-radius:8px;color:#a8b4c2;text-align:left}
+.nav button:hover,.nav button.active{background:#111a24;color:var(--text)}
+.nav .k{font-size:10px;color:#5f6b7b}
+.status-card{margin-top:auto;border:1px solid var(--line);background:linear-gradient(180deg,#10161f,#0c1017);padding:11px;border-radius:10px}
+.status-row{display:flex;justify-content:space-between;align-items:center;margin-bottom:7px}
+.status-dot{width:8px;height:8px;border-radius:50%;background:var(--green);box-shadow:0 0 10px rgba(104,224,165,.65)}
+.topbar{grid-column:2;border-bottom:1px solid var(--line);display:flex;align-items:center;justify-content:space-between;padding:0 18px;background:rgba(8,11,15,.82);backdrop-filter:blur(16px)}
+.path{color:var(--muted);font-size:12px}
+.path b{color:var(--text)}
+.top-actions{display:flex;align-items:center;gap:8px}
+.pill{padding:7px 10px;border:1px solid var(--line);border-radius:999px;background:#0e141d;color:#9baaba}
+.pill strong{color:var(--cyan)}
+.btn{padding:8px 12px;border:1px solid #2d4b5c;border-radius:8px;background:#0d1d27;cursor:pointer}
+.btn:hover{border-color:var(--cyan2)}
+.btn.primary{background:#12303a;border-color:#2d6d7d}
+.main{grid-column:2;min-width:0;min-height:0;display:grid;grid-template-rows:88px minmax(0,1fr) 214px;gap:10px;padding:10px}
+.metrics{display:grid;grid-template-columns:repeat(6,minmax(0,1fr));gap:8px}
+.metric{background:linear-gradient(180deg,#0e141c,#0b1017);border:1px solid var(--line);border-radius:10px;padding:11px 12px;box-shadow:var(--shadow)}
+.metric .label{color:var(--muted);font-size:10px;text-transform:uppercase;letter-spacing:.12em}
+.metric .value{margin-top:6px;font-size:21px;font-weight:700;letter-spacing:-.02em}
+.metric .sub{margin-top:4px;color:#677487;font-size:10px}
+.workspace{display:grid;grid-template-columns:minmax(0,1fr) 290px;gap:10px;min-height:0}
+.world-card{position:relative;overflow:hidden;border:1px solid var(--line);border-radius:12px;background:
+ radial-gradient(circle at 50% 36%,rgba(67,134,157,.14),transparent 28%),
+ linear-gradient(180deg,#0a1017,#080b11);box-shadow:var(--shadow)}
+.world-head{position:absolute;z-index:5;left:14px;right:14px;top:12px;display:flex;justify-content:space-between;align-items:center}
+.title{font-weight:700}
+.caption{color:var(--muted);font-size:10px}
+.world-actions{display:flex;gap:5px}
+.mini{padding:6px 8px;border:1px solid var(--line);border-radius:7px;background:#0b121a;color:#8795a8}
+.scene{position:absolute;inset:0;perspective:1000px;overflow:hidden}
+.grid-plane{position:absolute;left:7%;right:7%;top:18%;bottom:8%;transform:rotateX(58deg) rotateZ(0deg);transform-origin:center center;border:1px solid #213342;border-radius:18px;background:
+ linear-gradient(rgba(52,89,111,.11) 1px,transparent 1px),
+ linear-gradient(90deg,rgba(52,89,111,.11) 1px,transparent 1px),
+ radial-gradient(circle at 50% 45%,rgba(68,164,188,.12),transparent 35%);
+background-size:48px 48px,48px 48px,auto;box-shadow:inset 0 0 80px rgba(0,0,0,.35)}
+.orbit{position:absolute;left:18%;right:18%;top:26%;bottom:18%;border:1px solid rgba(111,231,255,.12);border-radius:50%;transform:rotateX(62deg);box-shadow:0 0 50px rgba(50,151,180,.05)}
+.core{position:absolute;left:50%;top:50%;transform:translate(-50%,-50%);width:116px;height:116px;border-radius:50%;display:grid;place-items:center;background:radial-gradient(circle,#1b3642 0,#0d1a22 55%,#091016 75%);border:1px solid #2b5567;box-shadow:0 0 46px rgba(69,194,221,.2),inset 0 0 35px rgba(111,231,255,.09);text-align:center;z-index:3}
+.core .ring{position:absolute;inset:-13px;border:1px solid rgba(111,231,255,.15);border-radius:50%;animation:pulse 3.5s ease-in-out infinite}
+.core b{font-size:12px}.core span{display:block;color:var(--muted);font-size:9px;margin-top:3px}
+@keyframes pulse{0%,100%{transform:scale(.97);opacity:.55}50%{transform:scale(1.04);opacity:1}}
+.agent{position:absolute;z-index:4;width:94px;padding:8px;border:1px solid #2a3948;border-radius:9px;background:rgba(13,19,27,.94);box-shadow:0 10px 28px rgba(0,0,0,.35);cursor:pointer;transition:.18s transform,.18s border-color}
+.agent:hover{transform:translateY(-2px);border-color:#4f7a8d}
+.agent .top{display:flex;align-items:center;gap:6px}
+.agent .dot{width:7px;height:7px;border-radius:50%;background:var(--cyan);box-shadow:0 0 10px rgba(111,231,255,.55)}
+.agent .role{font-weight:600;font-size:11px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.agent .id{color:#657284;font:9px ui-monospace,SFMono-Regular,Consolas,monospace;margin-top:4px}
+.a1{left:18%;top:30%}.a2{left:35%;top:23%}.a3{left:61%;top:24%}.a4{left:75%;top:34%}
+.a5{left:21%;top:54%}.a6{left:39%;top:69%}.a7{left:59%;top:67%}.a8{left:75%;top:56%}.a9{left:47%;top:34%}
+.inspector{min-height:0;display:flex;flex-direction:column;gap:8px}
+.panel{background:linear-gradient(180deg,#0f151d,#0b1017);border:1px solid var(--line);border-radius:10px;padding:11px;min-height:0}
+.panel h3{font-size:11px;margin:0 0 9px;color:#dce5ec;text-transform:uppercase;letter-spacing:.12em}
+.inspector-main{flex:1}
+.kv{display:grid;grid-template-columns:1fr auto;gap:6px;font-size:11px;padding:6px 0;border-bottom:1px solid #18212c}.kv:last-child{border-bottom:0}
+.kv span:first-child{color:var(--muted)} .mono{font:11px ui-monospace,SFMono-Regular,Consolas,monospace}
+.badge{display:inline-flex;align-items:center;gap:5px;padding:4px 7px;border-radius:999px;font-size:10px;background:#10231d;color:var(--green);border:1px solid #234d3a}
+.pipeline{display:flex;gap:5px}
+.stage{flex:1;min-width:0;border:1px solid var(--line);border-radius:8px;padding:8px;background:#0c1219}
+.stage b{display:block;font-size:9px;color:#7f8ea0;text-transform:uppercase;letter-spacing:.12em}.stage span{display:block;margin-top:5px;font-size:11px;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.stage.on{border-color:#2d5966;background:#0e1b22}.stage.on b,.stage.on span{color:var(--cyan)}
+.bottom{display:grid;grid-template-columns:minmax(0,1.1fr) minmax(0,.9fr);gap:10px;min-height:0}
+.runs,.events{min-height:0}
+.run-grid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:6px}
+.run{padding:8px;border:1px solid var(--line);border-radius:8px;background:#0c1219}
+.run .line{display:flex;justify-content:space-between;gap:6px}.run .name{font-weight:600;font-size:11px}.run .time{color:#657284;font:9px ui-monospace,monospace}
+.track{height:4px;background:#17202a;border-radius:99px;margin-top:8px;overflow:hidden}.fill{height:100%;width:72%;background:linear-gradient(90deg,#24596a,var(--cyan))}
+.event-list{height:156px;overflow:auto;font:10px ui-monospace,SFMono-Regular,Consolas,monospace;color:#94a5b7}
+.event-row{padding:5px 0;border-bottom:1px solid #151d27}.event-row b{color:#dfe7ed}
+@media(max-width:1180px){.app{grid-template-columns:190px 1fr}.metrics{grid-template-columns:repeat(3,1fr)}.workspace{grid-template-columns:1fr}.inspector{display:none}.bottom{grid-template-columns:1fr 1fr}}
+@media(max-width:800px){.app{display:block;overflow:auto}.sidebar{display:none}.topbar{height:60px}.main{grid-template-rows:auto auto auto}.metrics{grid-template-columns:repeat(2,1fr)}.world-card{min-height:640px}.bottom{grid-template-columns:1fr}.pipeline{overflow:auto}}
 </style>
 </head>
 <body>
-<header><h1>HazeMontaya OS · Autonomous Agent World</h1><div><span id="mode">—</span> <button onclick="tick()">Run cycle</button><button onclick="toggle()" id="auto">Auto: off</button></div></header>
-<main>
-<section id="world"><div class="floor"></div></section>
-<aside id="side">
-<div class="panel"><div class="grid">
-<div><div class="label">Treasury</div><div class="metric" id="balance">—</div></div>
-<div><div class="label">Runway</div><div class="metric" id="runway">—</div></div>
-<div><div class="label">Opportunities</div><div class="metric" id="opps">—</div></div>
-<div><div class="label">Events</div><div class="metric" id="events">—</div></div>
-</div></div>
-<div class="panel"><div class="label">Autonomous activity</div><div id="last" class="stage">Waiting</div></div>
-<div class="panel"><div class="label">Event stream</div><div id="log" class="log"></div></div>
+<div class="app">
+<aside class="sidebar">
+  <div class="brand"><div class="logo"></div><div><b>HazeMontaya OS</b><small>Mission Control</small></div></div>
+  <div class="section-label">Operate</div>
+  <nav class="nav">
+    <button class="active"><span>Mission</span><span class="k">M</span></button>
+    <button><span>Agents</span><span class="k">A</span></button>
+    <button><span>Workflows</span><span class="k">W</span></button>
+    <button><span>Revenue</span><span class="k">R</span></button>
+    <button><span>Research</span><span class="k">S</span></button>
+    <button><span>Engineering</span><span class="k">E</span></button>
+  </nav>
+  <div class="section-label">System</div>
+  <nav class="nav">
+    <button><span>Memory</span><span class="k">Y</span></button>
+    <button><span>Finance</span><span class="k">F</span></button>
+    <button><span>Security</span><span class="k">Q</span></button>
+    <button><span>Settings</span><span class="k">,</span></button>
+  </nav>
+  <div class="status-card">
+    <div class="status-row"><b>Runtime</b><span class="status-dot"></span></div>
+    <div class="caption">Connected to local execution plane</div>
+  </div>
 </aside>
+
+<header class="topbar">
+  <div class="path">workspace / <b>mission-control</b></div>
+  <div class="top-actions">
+    <span class="pill">mode <strong id="mode">—</strong></span>
+    <span class="pill">queue <strong id="queue">0</strong></span>
+    <button class="btn" onclick="toggle()" id="auto">Auto: off</button>
+    <button class="btn primary" onclick="tick()">Run cycle</button>
+  </div>
+</header>
+
+<main class="main">
+  <section class="metrics">
+    <div class="metric"><div class="label">Treasury</div><div class="value" id="balance">—</div><div class="sub">spendable runtime funds</div></div>
+    <div class="metric"><div class="label">Runway</div><div class="value" id="runway">—</div><div class="sub">at current burn</div></div>
+    <div class="metric"><div class="label">Revenue</div><div class="value" id="revenue">—</div><div class="sub">realized ledger</div></div>
+    <div class="metric"><div class="label">Agents</div><div class="value" id="agents">—</div><div class="sub">registered workers</div></div>
+    <div class="metric"><div class="label">Opportunities</div><div class="value" id="opps">—</div><div class="sub">active revenue paths</div></div>
+    <div class="metric"><div class="label">Events</div><div class="value" id="events">—</div><div class="sub">audit log entries</div></div>
+  </section>
+
+  <section class="workspace">
+    <section class="world-card">
+      <div class="world-head">
+        <div><div class="title">Agent World</div><div class="caption">spatial projection of the live runtime</div></div>
+        <div class="world-actions"><span class="mini">WORLD</span><span class="mini">FLOW</span><span class="mini">RUN</span></div>
+      </div>
+      <div class="scene">
+        <div class="grid-plane"></div><div class="orbit"></div>
+        <div class="core"><div class="ring"></div><div><b>OS CORE</b><span>governed execution</span></div></div>
+        <div class="agent a1" data-i="0"><div class="top"><span class="dot"></span><span class="role">Governor</span></div><div class="id">agent-01</div></div>
+        <div class="agent a2" data-i="1"><div class="top"><span class="dot"></span><span class="role">Research</span></div><div class="id">agent-02</div></div>
+        <div class="agent a3" data-i="2"><div class="top"><span class="dot"></span><span class="role">Business</span></div><div class="id">agent-03</div></div>
+        <div class="agent a4" data-i="3"><div class="top"><span class="dot"></span><span class="role">Engineering</span></div><div class="id">agent-04</div></div>
+        <div class="agent a5" data-i="4"><div class="top"><span class="dot"></span><span class="role">Content</span></div><div class="id">agent-05</div></div>
+        <div class="agent a6" data-i="5"><div class="top"><span class="dot"></span><span class="role">Finance</span></div><div class="id">agent-06</div></div>
+        <div class="agent a7" data-i="6"><div class="top"><span class="dot"></span><span class="role">Operations</span></div><div class="id">agent-07</div></div>
+        <div class="agent a8" data-i="7"><div class="top"><span class="dot"></span><span class="role">QA</span></div><div class="id">agent-08</div></div>
+        <div class="agent a9" data-i="8"><div class="top"><span class="dot"></span><span class="role">Security</span></div><div class="id">agent-09</div></div>
+      </div>
+    </section>
+
+    <aside class="inspector">
+      <section class="panel inspector-main">
+        <h3>Inspector</h3>
+        <div class="kv"><span>Selection</span><b id="sel">Mission</b></div>
+        <div class="kv"><span>Status</span><span class="badge"><span class="status-dot"></span> live</span></div>
+        <div class="kv"><span>Last action</span><span id="lastAction">waiting</span></div>
+        <div class="kv"><span>Queued</span><b id="queued2">0</b></div>
+        <div class="kv"><span>Customers</span><b id="customers">0</b></div>
+        <div class="kv"><span>Outstanding</span><b id="outstanding">0¢</b></div>
+      </section>
+      <section class="panel">
+        <h3>Current revenue path</h3>
+        <div class="pipeline">
+          <div class="stage" data-stage="Discovered"><b>01</b><span>Discover</span></div>
+          <div class="stage" data-stage="Validating"><b>02</b><span>Validate</span></div>
+          <div class="stage" data-stage="Building"><b>03</b><span>Build</span></div>
+          <div class="stage" data-stage="Selling"><b>04</b><span>Sell</span></div>
+          <div class="stage" data-stage="Delivering"><b>05</b><span>Deliver</span></div>
+          <div class="stage" data-stage="Measuring"><b>06</b><span>Measure</span></div>
+        </div>
+      </section>
+    </aside>
+  </section>
+
+  <section class="bottom">
+    <section class="panel runs">
+      <h3>Execution overview</h3>
+      <div class="run-grid" id="runs">
+        <div class="run"><div class="line"><span class="name">Scheduler</span><span class="time">live</span></div><div class="track"><div class="fill"></div></div></div>
+        <div class="run"><div class="line"><span class="name">Revenue</span><span class="time">adaptive</span></div><div class="track"><div class="fill" style="width:48%"></div></div></div>
+        <div class="run"><div class="line"><span class="name">Maintenance</span><span class="time">idle</span></div><div class="track"><div class="fill" style="width:24%"></div></div></div>
+      </div>
+    </section>
+    <section class="panel events">
+      <h3>Live event timeline</h3>
+      <div class="event-list" id="log"></div>
+    </section>
+  </section>
 </main>
+</div>
 <script>
 let timer=null;
-const positions=[[12,25],[28,43],[45,20],[60,48],[76,25],[18,65],[39,70],[62,72],[80,63]];
 function esc(s){return String(s).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]))}
+function fmtCents(v){return Number(v||0).toLocaleString('de-DE')+'¢'}
 function render(s){
- document.querySelector('#balance').textContent=s.treasury.balance_cents+'¢';
- document.querySelector('#runway').textContent=s.treasury.runway_days==null?'∞':s.treasury.runway_days+'d';
- document.querySelector('#opps').textContent=s.opportunities;
- document.querySelector('#events').textContent=s.events;
- document.querySelector('#mode').textContent=s.treasury.mode;
- const world=document.querySelector('#world'); world.querySelectorAll('.agent').forEach(x=>x.remove());
- s.agents.forEach((a,i)=>{const d=document.createElement('div');d.className='agent';d.style.left=positions[i][0]+'%';d.style.top=positions[i][1]+'%';d.innerHTML='<div class="dot"></div><b>'+esc(a.role)+'</b><div class="label">'+esc(a.id)+'</div>';world.appendChild(d)});
- document.querySelector('#log').innerHTML=s.events_recent.map(e=>'<div>'+esc(e)+'</div>').join('');
+  document.querySelector('#balance').textContent=fmtCents(s.treasury.balance_cents);
+  document.querySelector('#runway').textContent=s.treasury.runway_days==null?'∞':s.treasury.runway_days+'d';
+  document.querySelector('#revenue').textContent=fmtCents(s.treasury.revenue_cents);
+  document.querySelector('#agents').textContent=s.agents.length;
+  document.querySelector('#opps').textContent=s.opportunities;
+  document.querySelector('#events').textContent=s.events;
+  document.querySelector('#mode').textContent=s.treasury.mode;
+  document.querySelector('#queue').textContent=s.queued_tasks;
+  document.querySelector('#queued2').textContent=s.queued_tasks;
+  document.querySelector('#customers').textContent=s.customers;
+  document.querySelector('#outstanding').textContent=fmtCents(s.outstanding_invoices_cents);
+  const recent=s.events_recent||[];
+  document.querySelector('#log').innerHTML=recent.map((e,i)=>'<div class="event-row"><b>'+String(recent.length-i).padStart(2,'0')+'</b> '+esc(e)+'</div>').join('');
+  const revenueEvent=recent.find(e=>String(e).startsWith('revenue:'));
+  if(revenueEvent){
+    const stage=revenueEvent.split(' -> ')[1];
+    document.querySelectorAll('.stage').forEach(x=>x.classList.toggle('on',x.dataset.stage===stage));
+  }
+  document.querySelector('#lastAction').textContent=recent[0]||'waiting';
 }
-async function state(){const r=await fetch('/api/state');render(await r.json())}
-async function tick(){const r=await fetch('/api/tick',{method:'POST'});const x=await r.json();document.querySelector('#last').textContent=x.summary;await state()}
-function toggle(){const b=document.querySelector('#auto');if(timer){clearInterval(timer);timer=null;b.textContent='Auto: off'}else{timer=setInterval(tick,5000);b.textContent='Auto: on';tick()}}
-state();
+async function state(){const r=await fetch('/api/state');if(!r.ok)throw new Error('state '+r.status);render(await r.json())}
+async function tick(){const r=await fetch('/api/tick',{method:'POST'});const x=await r.json();document.querySelector('#lastAction').textContent=x.summary||x.kind;await state()}
+function toggle(){const b=document.querySelector('#auto');if(timer){clearInterval(timer);timer=null;b.textContent='Auto: off'}else{timer=setInterval(()=>tick().catch(()=>{}),5000);b.textContent='Auto: on';tick().catch(()=>{})}}
+document.querySelectorAll('.agent').forEach(el=>el.addEventListener('click',()=>{document.querySelector('#sel').textContent=el.querySelector('.role').textContent}));
+state().catch(e=>{document.querySelector('#lastAction').textContent='runtime unavailable'});
 </script>
-</body></html>
+</body>
+</html>
