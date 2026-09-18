@@ -70,7 +70,7 @@ fn handle(mut stream: TcpStream, rt: &mut Runtime, index: &str) {
     }
 }
 fn main() {
-    let index = include_str!("static/index.html");
+    let index = include_str!("../static/index.html");
     let mut runtime = Runtime::new(100_000);
     println!("HazeMontaya OS dashboard: http://127.0.0.1:8787");
     let listener = TcpListener::bind("127.0.0.1:8787").expect("bind dashboard");
