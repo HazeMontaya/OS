@@ -23,3 +23,4 @@ serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 os-observer = { path = "../observer" }
 os-scheduler = { path = "../scheduler" }
+os-supervisor = { path = "../supervisor" }
