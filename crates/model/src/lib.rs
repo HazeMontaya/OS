@@ -118,6 +118,22 @@ impl ModelRouter {
     pub fn candidates(&self) -> &[ModelCandidate] {
         &self.candidates
     }
+    pub fn mark_unhealthy(&mut self, provider: &str, model: &str) {
+        if let Some(candidate)=self.candidates.iter_mut().find(|c| c.provider==provider && c.model==model) {
+            candidate.healthy=false;
+        }
+    }
+
+    pub fn mark_healthy(&mut self, provider: &str, model: &str) {
+        if let Some(candidate)=self.candidates.iter_mut().find(|c| c.provider==provider && c.model==model) {
+            candidate.healthy=true;
+        }
+    }
+
+    pub fn health(&self, provider: &str, model: &str) -> Option<bool> {
+        self.candidates.iter().find(|c| c.provider==provider && c.model==model).map(|c| c.healthy)
+    }
+
 
     pub fn route(&self, min_quota_tokens: usize, max_latency_ms: Option<u32>) -> Result<RoutingDecision, ModelError> {
         let mut available: Vec<&ModelCandidate> = self.candidates.iter()
