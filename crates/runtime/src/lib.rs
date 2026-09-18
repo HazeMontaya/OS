@@ -257,7 +257,16 @@ fn parse_stage(s:&str)->Option<os_revenue::RevenueStage>{match s{"Discovered"=>S
  #[test]fn readonly_executes_real_tool(){let mut r=Runtime::new(100_000);r.context.workspace_root=std::env::temp_dir();let result=r.submit_task("agent-02",DecisionClass::ReadOnly,0,ToolRequest::ReadFile{path:PathBuf::from("haze-os-runtime-test.txt")},false);assert_eq!(result.status,TaskStatus::Failed);assert!(r.snapshot().events>=4);
 }
 }
-\nfn default_work_graph(agents:&[Agent])->WorkGraph {\n    let mut g=WorkGraph::default();\n    for agent in agents { let _=g.add_node(os_orchestration::WorkNode{id:agent.id.clone(),label:agent.role.clone(),agent_id:Some(agent.id.clone()),kind:NodeKind::Agent,class:DecisionClass::ReadOnly}); }\n    let edges=[("agent-01","agent-02"),("agent-01","agent-09"),("agent-02","agent-03"),("agent-02","agent-04"),("agent-09","agent-08"),("agent-04","agent-08"),("agent-03","agent-05"),("agent-05","agent-06"),("agent-06","agent-07")];\n    for (from,to) in edges { let _=g.connect(from,to,8); }\n    g\n}\n\n
+
+fn default_work_graph(agents:&[Agent])->WorkGraph {
+    let mut g=WorkGraph::default();
+    for agent in agents { let _=g.add_node(os_orchestration::WorkNode{id:agent.id.clone(),label:agent.role.clone(),agent_id:Some(agent.id.clone()),kind:NodeKind::Agent,class:DecisionClass::ReadOnly}); }
+    let edges=[("agent-01","agent-02"),("agent-01","agent-09"),("agent-02","agent-03"),("agent-02","agent-04"),("agent-09","agent-08"),("agent-04","agent-08"),("agent-03","agent-05"),("agent-05","agent-06"),("agent-06","agent-07")];
+    for (from,to) in edges { let _=g.connect(from,to,8); }
+    g
+}
+
+
 
 fn bootstrap_system_model(agents:&[Agent]) -> SystemModel {
     let mut model=SystemModel::default();
