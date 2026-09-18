@@ -50,7 +50,7 @@ impl Runtime{
   for agent in &agents { workspaces.ensure(&agent.id, format!("workspaces/{}", agent.id)); }
   let system_model=bootstrap_system_model(&agents);
   let mut goals=GoalGraph::default();
-  let _=goals.add_goal(Goal{id:"mission:james".into(),title:"Operate JAMES".into(),description:"Keep the autonomous control plane healthy, useful, governed, and economically sustainable.".into(),status:GoalStatus::Active,parent_id:None,depends_on:std::collections::BTreeSet::new()});
+  let _=goals.add_goal(Goal{id:"mission:james".into(),title:"Operate JAMES".into(),description:"Keep the autonomous control plane healthy, useful, governed, and economically sustainable.".into(),kind:os_orchestration::GoalKind::Mission,action:None,owner_agent:None,status:GoalStatus::Active,parent_id:None,depends_on:std::collections::BTreeSet::new()});
   let mut scheduler=Scheduler::default();
   let _=scheduler.schedule(ScheduledJob{id:"system-health".into(),trigger:Trigger::IntervalMs{every_ms:30_000},action:"system.observe".into(),next_due_ms:0,enabled:true,runs:0});
   let mut observers=ObserverHub::default(); observers.register(Box::new(SystemObserver));
@@ -59,7 +59,7 @@ impl Runtime{
    work_graph,work_items:vec![],workspaces,decisions:vec![],system_model,goals,scheduler,observers,observations:vec![],thresholds:SurvivalThresholds{explore_days:30,operate_days:14,optimize_days:7,emergency_days:2},next_task:1}
  }
  pub fn snapshot(&self)->RuntimeSnapshot{let t=self.treasury.snapshot(self.thresholds);RuntimeSnapshot{agents:self.agents.clone(),survival:os_survival::replan(t.mode),treasury:t,opportunities:self.opportunities.len(),changes:self.changes.len(),events:self.events.len(),queued_tasks:self.pending_tasks.len(),customers:self.commerce.customers.len(),outstanding_invoices_cents:self.commerce.outstanding_cents(),work_items:self.work_items.len(),workspaces:self.workspaces.all().count(),decisions:self.decisions.len(),model_candidates:self.model_router.candidates().len(),goals:self.goals.goals.len(),system_entities:self.system_model.entities.len(),system_relations:self.system_model.relations.len(),system_evidence:self.system_model.evidence.len(),scheduled_jobs:self.scheduler.all().count(),observations:self.observations.len()}}
- pub fn next_ready_goals(&self)->Vec<&Goal>{ self.goals.ready() }
+ pub fn next_ready_goals(&self)->Vec<&Goal>{ self.goals.actionable_ready() }
  pub fn set_goal_status(&mut self,id:&str,status:GoalStatus)->Result<(),String>{ self.goals.set_status(id,status) }
  pub fn route_model(&self, task_kind:&str, min_quota_tokens:usize, max_latency_ms:Option<u32>) -> Result<RoutingDecision,ModelError> { self.model_router.route_for_task(task_kind,min_quota_tokens,max_latency_ms) }
  pub fn complete_model(&mut self, task_kind:&str, request:&ModelRequest) -> Result<ModelResponse,ModelError> {
@@ -157,6 +157,30 @@ impl Runtime{
   }
   jobs.len()
  }
+ pub fn materialize_ready_goals(&mut self)->usize{
+  let goals=self.goals.actionable_ready().into_iter().map(|g|(g.id.clone(),g.action,g.owner_agent.clone())).collect::<Vec<_>>();
+  let mut count=0;
+  for (goal_id,action,owner_agent) in goals {
+    if self.pending_tasks.iter().any(|t| t.agent==owner_agent.clone().unwrap_or_else(||"agent-02".into())) || self.work_items.iter().any(|w| w.id==format!("goal:{goal_id}")) { continue; }
+    let agent=owner_agent.unwrap_or_else(||"agent-02".into());
+    let (tool,class,cost) = match action.unwrap() {
+      os_orchestration::GoalAction::ObserveSystem => (ToolRequest::RunCommand{program:"rustc".into(),args:vec!["--version".into()]},DecisionClass::ReadOnly,0),
+      os_orchestration::GoalAction::VerifyRuntime => (ToolRequest::RunCommand{program:"cargo".into(),args:vec!["test".into(),"--workspace".into()]},DecisionClass::External,0),
+      os_orchestration::GoalAction::AdvanceRevenue => (ToolRequest::RunCommand{program:"rustc".into(),args:vec!["--version".into()]},DecisionClass::ReadOnly,0),
+      os_orchestration::GoalAction::Research => (ToolRequest::RunCommand{program:"rustc".into(),args:vec!["--version".into()]},DecisionClass::ReadOnly,0),
+      os_orchestration::GoalAction::Build => (ToolRequest::RunCommand{program:"cargo".into(),args:vec!["build".into(),"--workspace".into()]},DecisionClass::External,0),
+      os_orchestration::GoalAction::Test => (ToolRequest::RunCommand{program:"cargo".into(),args:vec!["test".into(),"--workspace".into()]},DecisionClass::External,0),
+      os_orchestration::GoalAction::Review => (ToolRequest::RunCommand{program:"cargo".into(),args:vec!["fmt".into(),"--all".into(),"--".into(),"--check".into()]},DecisionClass::External,0),
+    };
+    self.queue_task_with_goal(agent,class,cost,tool,false,goal_id);
+    count+=1;
+  }
+  count
+ }
+ pub fn queue_task_with_goal(&mut self,agent:String,class:DecisionClass,cost:i64,tool:ToolRequest,approval:bool,goal_id:String){
+  self.pending_tasks.push(QueuedTask{agent,class,cost:cost.max(0),tool,approval});
+  self.memory.remember("agent-01","goal-plan",format!("goal {goal_id} materialized into executable task"));
+ }
  pub fn run_cycle(&mut self) -> CycleResult {
   self.tick_scheduler(now_ms() as u128);
   let mode = self.snapshot().treasury.mode;
@@ -176,6 +200,9 @@ impl Runtime{
       ToolRequest::RunCommand { program: "rustc".into(), args: vec!["--version".into()] },
       false,
   );
+  if self.pending_tasks.is_empty() {
+      self.materialize_ready_goals();
+  }
   if self.pending_tasks.is_empty() {
       let plans=self.planner.plan(PlannerInput{treasury:self.snapshot().treasury.clone(),opportunities:&self.opportunities,queued_tasks:self.pending_tasks.len()});
       for p in plans { self.queue_task(p.agent,p.class,p.estimated_cost_cents,p.tool,p.approval); self.memory.remember("agent-01","plan",p.reason); }
