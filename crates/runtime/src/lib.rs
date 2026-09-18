@@ -125,7 +125,7 @@ impl Runtime{
          let line=line?; let mut p=line.split('\t');
          match p.next().unwrap_or("") {
              "treasury" => { let v:Vec<_>=p.collect(); if v.len()==5 { if let (Ok(b),Ok(r),Ok(rv),Ok(ex),Ok(br))=(v[0].parse(),v[1].parse(),v[2].parse(),v[3].parse(),v[4].parse()){self.treasury.restore_state(b,r,rv,ex,br);} } }
-             "next_task" => if let Some(v)=p.next(){if let Ok(n)=v.parse(){self.next_task=n.max(1);}}
+             "next_task" => if let Some(v)=p.next(){if let Ok(n)=v.parse::<u64>(){self.next_task=n.max(1);}}
              "opportunity" => { let v:Vec<_>=p.collect(); if v.len()==7 { if let (Ok(rev),Ok(cost),Ok(conf))=(v[3].parse(),v[4].parse(),v[5].parse()){if let Some(stage)=parse_stage(v[6]){self.opportunities.push(RevenueProject{opportunity:Opportunity{id:unesc(v[0]),name:unesc(v[1]),hypothesis:unesc(v[2]),expected_revenue_cents:rev,expected_cost_cents:cost,confidence_bps:conf},stage});}}}}
              _ => {}
          }
