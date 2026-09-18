@@ -10,7 +10,7 @@ use os_planner::{Planner,PlannerInput,RulePlanner};
 use os_model::EnvModelConfig;
 use os_commerce::Commerce;
 use os_research::ResearchPolicy;
-use os_orchestration::{DecisionRecord, NodeKind, WorkGraph, WorkItem, WorkspaceRegistry};
+use os_orchestration::{AgentHandoff, DecisionRecord, NodeKind, WorkGraph, WorkItem, WorkspaceRegistry};
 use os_model::{ModelCandidate, ModelRouter, RoutingDecision, ModelError};
 use os_system_model::{EntityKind, Evidence, SystemModel, VerificationStatus};
 use std::path::PathBuf;
@@ -206,6 +206,13 @@ impl Runtime{
          }
      }
      cycles
+ }
+ pub fn handoff(&mut self, work_item_id:&str, next_agent:&str)->Result<AgentHandoff,String>{
+  let index=self.work_items.iter().position(|w|w.id==work_item_id).ok_or_else(||"unknown work item".to_string())?;
+  let handoff_id=format!("handoff-{:06}",self.events.len()+1);
+  let handoff={let item=&mut self.work_items[index];self.work_graph.handoff(item,next_agent,handoff_id.clone())?};
+  self.events.push(Event::AgentHandoff{work_item_id:handoff.work_item_id.clone(),from_agent:handoff.from_agent.clone(),to_agent:handoff.to_agent.clone()});
+  Ok(handoff)
  }
  pub fn register_change(&mut self,p:ChangeProposal){self.changes.push(p)}
  pub fn record_revenue(&mut self,cents:i64,memo:impl Into<String>){let memo=memo.into();self.treasury.record_revenue(cents,memo.clone());self.events.push(Event::RevenueRecorded{cents,memo});}
