@@ -15,6 +15,7 @@ use os_model::{ModelCandidate, ModelRouter, RoutingDecision, ModelError};
 use os_system_model::{EntityKind, Evidence, SystemModel, VerificationStatus};
 use os_observer::{Observation, ObserverHub, SystemObserver};
 use os_scheduler::{ScheduledJob, Scheduler, Trigger};
+use os_supervisor::Supervisor;
 use std::path::PathBuf;
 use std::sync::atomic::{AtomicBool,Ordering};
 use std::time::Duration;
@@ -31,11 +32,13 @@ struct PersistedOrchestrationState {
     decisions: Vec<DecisionRecord>,
     goals: GoalGraph,
     scheduler: Scheduler,
+    #[serde(default)]
+    supervisor: Supervisor,
 }
 
 pub struct Runtime{
  pub agents:Vec<Agent>,pub treasury:Treasury,pub opportunities:Vec<RevenueProject>,pub changes:Vec<ChangeProposal>,
- pub execution:ExecutionEngine,pub model:EnvModelConfig,pub model_router:ModelRouter,pub planner:RulePlanner,pub goal_planner:GoalPlanner,pub commerce:Commerce,pub research_policy:ResearchPolicy,pub pending_tasks:Vec<QueuedTask>,pub events:EventLog,pub memory:Memory,pub context:ExecutionContext,pub work_graph:WorkGraph,pub work_items:Vec<WorkItem>,pub workspaces:WorkspaceRegistry,pub decisions:Vec<DecisionRecord>,pub system_model:SystemModel,pub goals:GoalGraph,pub scheduler:Scheduler,pub observers:ObserverHub,pub observations:Vec<Observation>,thresholds:SurvivalThresholds,next_task:u64
+ pub execution:ExecutionEngine,pub model:EnvModelConfig,pub model_router:ModelRouter,pub planner:RulePlanner,pub goal_planner:GoalPlanner,pub commerce:Commerce,pub research_policy:ResearchPolicy,pub pending_tasks:Vec<QueuedTask>,pub events:EventLog,pub memory:Memory,pub context:ExecutionContext,pub work_graph:WorkGraph,pub work_items:Vec<WorkItem>,pub workspaces:WorkspaceRegistry,pub decisions:Vec<DecisionRecord>,pub system_model:SystemModel,pub goals:GoalGraph,pub scheduler:Scheduler,pub supervisor:Supervisor,pub observers:ObserverHub,pub observations:Vec<Observation>,thresholds:SurvivalThresholds,next_task:u64
 }
 impl Runtime{
  pub fn new(initial_balance_cents:i64)->Self{
@@ -54,10 +57,12 @@ impl Runtime{
   let _=goals.add_goal(Goal{id:"goal:boot-health".into(),title:"Verify runtime workspace".into(),description:"Confirm that the runtime can read its canonical workspace before entering continuous operation.".into(),kind:os_orchestration::GoalKind::Task,action:Some(os_orchestration::GoalAction::VerifyRuntime),owner_agent:Some("agent-09".into()),status:GoalStatus::Proposed,parent_id:Some("mission:james".into()),depends_on:std::collections::BTreeSet::new()});
   let mut scheduler=Scheduler::default();
   let _=scheduler.schedule(ScheduledJob{id:"system-health".into(),trigger:Trigger::IntervalMs{every_ms:30_000},action:"system.observe".into(),next_due_ms:0,enabled:true,runs:0});
+  let mut supervisor=Supervisor::default();
+  for service in ["runtime","scheduler","observer","model","execution"] { let _=supervisor.register(service); }
   let mut observers=ObserverHub::default(); observers.register(Box::new(SystemObserver));
   Self{agents,treasury,opportunities:vec![],changes:vec![],execution:ExecutionEngine::default(),model,model_router,planner:RulePlanner::default(),goal_planner:GoalPlanner::default(),commerce:Commerce::default(),research_policy:ResearchPolicy::default(),pending_tasks:vec![],events:EventLog::default(),memory:Memory::default(),
    context:ExecutionContext{workspace_root:PathBuf::from("."),allowed_commands:vec!["cargo".into(),"rustc".into(),"git".into()],command_timeout:Duration::from_secs(30),max_output_bytes:64*1024},
-   work_graph,work_items:vec![],workspaces,decisions:vec![],system_model,goals,scheduler,observers,observations:vec![],thresholds:SurvivalThresholds{explore_days:30,operate_days:14,optimize_days:7,emergency_days:2},next_task:1}
+   work_graph,work_items:vec![],workspaces,decisions:vec![],system_model,goals,scheduler,supervisor,observers,observations:vec![],thresholds:SurvivalThresholds{explore_days:30,operate_days:14,optimize_days:7,emergency_days:2},next_task:1}
  }
  pub fn snapshot(&self)->RuntimeSnapshot{let t=self.treasury.snapshot(self.thresholds);RuntimeSnapshot{agents:self.agents.clone(),survival:os_survival::replan(t.mode),treasury:t,opportunities:self.opportunities.len(),changes:self.changes.len(),events:self.events.len(),queued_tasks:self.pending_tasks.len(),customers:self.commerce.customers.len(),outstanding_invoices_cents:self.commerce.outstanding_cents(),work_items:self.work_items.len(),workspaces:self.workspaces.all().count(),decisions:self.decisions.len(),model_candidates:self.model_router.candidates().len(),goals:self.goals.goals.len(),ready_goals:self.goals.ready().len(),active_goals:self.goals.goals.values().filter(|g|g.status==GoalStatus::Active).count(),completed_goals:self.goals.goals.values().filter(|g|g.status==GoalStatus::Completed).count(),system_entities:self.system_model.entities.len(),system_relations:self.system_model.relations.len(),system_evidence:self.system_model.evidence.len(),scheduled_jobs:self.scheduler.all().count(),observations:self.observations.len()}}
  pub fn goal_plan(&self)->Vec<os_planner::GoalPlanStep>{ self.goal_planner.compile(&self.goals) }
@@ -94,6 +99,19 @@ impl Runtime{
   }
   Err(last_error.unwrap_or_else(||ModelError::Unavailable("all model candidates failed".into())))
  }
+ pub fn agent_execution_context(&self, agent_id:&str) -> Result<ExecutionContext,String> {
+  let workspace=self.workspaces.get(agent_id).ok_or_else(|| format!("unknown workspace for agent {agent_id}"))?;
+  let base=self.context.workspace_root.clone();
+  let root=PathBuf::from(&workspace.root);
+  let root=if root.is_absolute() { root } else { base.join(root) };
+  std::fs::create_dir_all(&root).map_err(|e| format!("cannot provision workspace {}: {e}", workspace.id))?;
+  Ok(ExecutionContext{
+    workspace_root:root,
+    allowed_commands:self.context.allowed_commands.clone(),
+    command_timeout:self.context.command_timeout,
+    max_output_bytes:self.context.max_output_bytes,
+  })
+ }
  pub fn queue_task(&mut self,agent:impl Into<String>,class:DecisionClass,cost:i64,tool:ToolRequest,approval:bool){self.pending_tasks.push(QueuedTask{agent:agent.into(),class,cost:cost.max(0),tool,approval,goal_id:None});}
  pub fn execute_next_queued_task(&mut self)->Option<ExecutionResult>{
      let task=self.pending_tasks.first()?.clone();
@@ -119,7 +137,17 @@ impl Runtime{
    }
    self.events.push(Event::TaskQueued{task_id:task.id.clone(),agent:task.agent.clone()});
    self.events.push(Event::TaskStarted{task_id:task.id.clone()});self.events.push(Event::ToolCalled{task_id:task.id.clone(),tool:task.tool.name().into()});
-   let result=self.execution.execute(&task,&self.context,planned);
+   let context=match self.agent_execution_context(&task.agent) {
+    Ok(context)=>context,
+    Err(reason)=>{
+      let _=self.workspaces.finish_run(&task.agent);
+      decision.close("blocked",reason.clone(),"repair or reprovision the agent workspace before retry");
+      self.decisions.push(decision);
+      self.events.push(Event::TaskBlocked{task_id:task.id.clone(),reason});
+      return ExecutionResult{task_id:task.id.clone(),decision:Decision::Deny,status:TaskStatus::Blocked,message:"agent workspace could not be provisioned".into(),output:None};
+    }
+   };
+   let result=self.execution.execute(&task,&context,planned);
    let _=self.workspaces.finish_run(&task.agent);
    if let Some(item)=self.work_items.last_mut(){ self.work_graph.terminal(item,result.status==TaskStatus::Completed); }
    decision.close(if result.status==TaskStatus::Completed {"completed"} else {"failed"},result.message.clone(),if result.status==TaskStatus::Completed {"reuse successful procedure"} else {"inspect failure before retry"});
@@ -201,6 +229,15 @@ impl Runtime{
   self.memory.remember("agent-01","goal-plan",format!("goal {goal_id} materialized into executable task"));
  }
  pub fn run_cycle(&mut self) -> CycleResult {
+  let result=self.run_cycle_inner();
+  if result.success {
+    let _=self.supervisor.report_success("runtime");
+  } else {
+    let _=self.supervisor.report_failure("runtime",now_ms(),"autonomous cycle returned failure");
+  }
+  result
+ }
+ fn run_cycle_inner(&mut self) -> CycleResult {
   self.tick_scheduler(now_ms() as u128);
   let mode = self.snapshot().treasury.mode;
   self.memory.remember("agent-01", "cycle", format!("autonomous cycle started in {:?}", mode));
@@ -258,7 +295,7 @@ impl Runtime{
          }
      }
      for p in &self.opportunities { writeln!(f,"opportunity\t{}\t{}\t{}\t{}\t{}\t{}\t{:?}",esc(&p.opportunity.id),esc(&p.opportunity.name),esc(&p.opportunity.hypothesis),p.opportunity.expected_revenue_cents,p.opportunity.expected_cost_cents,p.opportunity.confidence_bps,p.stage)?; }
-     f.sync_all()?; std::fs::rename(tmp,path)?; self.system_model.save_json(path.with_extension("system.json"))?; let orchestration=PersistedOrchestrationState{work_items:self.work_items.clone(),workspaces:self.workspaces.all().cloned().collect(),decisions:self.decisions.clone(),goals:self.goals.clone(),scheduler:self.scheduler.clone()}; let data=serde_json::to_vec_pretty(&orchestration).map_err(|e|std::io::Error::new(std::io::ErrorKind::InvalidData,e.to_string()))?; std::fs::write(path.with_extension("orchestration.json"),data)?; Ok(())
+     f.sync_all()?; std::fs::rename(tmp,path)?; self.system_model.save_json(path.with_extension("system.json"))?; let orchestration=PersistedOrchestrationState{work_items:self.work_items.clone(),workspaces:self.workspaces.all().cloned().collect(),decisions:self.decisions.clone(),goals:self.goals.clone(),scheduler:self.scheduler.clone(),supervisor:self.supervisor.clone()}; let data=serde_json::to_vec_pretty(&orchestration).map_err(|e|std::io::Error::new(std::io::ErrorKind::InvalidData,e.to_string()))?; std::fs::write(path.with_extension("orchestration.json"),data)?; Ok(())
  }
  pub fn load_state(&mut self, path: impl AsRef<std::path::Path>) -> std::io::Result<()> {
      use std::io::{BufRead,BufReader};
@@ -286,7 +323,7 @@ impl Runtime{
      }
      self.system_model=SystemModel::load_json(state_path.with_extension("system.json"))?;
      let orchestration_path=path.as_ref().with_extension("orchestration.json");
-     if let Ok(data)=std::fs::read(&orchestration_path) { if let Ok(orchestration)=serde_json::from_slice::<PersistedOrchestrationState>(&data) { self.work_items=orchestration.work_items; self.workspaces.replace_all(orchestration.workspaces); self.decisions=orchestration.decisions; self.goals=orchestration.goals; self.scheduler=orchestration.scheduler; } }
+     if let Ok(data)=std::fs::read(&orchestration_path) { if let Ok(orchestration)=serde_json::from_slice::<PersistedOrchestrationState>(&data) { self.work_items=orchestration.work_items; self.workspaces.replace_all(orchestration.workspaces); self.decisions=orchestration.decisions; self.goals=orchestration.goals; self.scheduler=orchestration.scheduler; self.supervisor=orchestration.supervisor; for service in ["runtime","scheduler","observer","model","execution"] { let _=self.supervisor.register(service); } } }
      Ok(())
  }
  pub fn load_journals(&mut self, events: impl AsRef<std::path::Path>, memory: impl AsRef<std::path::Path>) -> std::io::Result<()> {
@@ -360,7 +397,7 @@ fn parse_stage(s:&str)->Option<os_revenue::RevenueStage>{match s{"Discovered"=>S
 
 #[cfg(test)]mod tests{
  use super::*;
- #[test]fn boots(){assert_eq!(Runtime::new(100_000).agents.len(),9)}
+ #[test]fn boots(){let r=Runtime::new(100_000);assert_eq!(r.agents.len(),9);assert_eq!(r.supervisor.all().count(),5);assert_eq!(r.supervisor.get("runtime").unwrap().state,os_supervisor::ServiceState::Healthy)}
  #[test]fn autonomous_cycle_runs(){let mut r=Runtime::new(100_000);let result=r.run_cycle();assert_eq!(result.agent,"scheduler");assert!(r.snapshot().events>0)}
  #[test]fn revenue_cycles_through_stages(){let mut r=Runtime::new(100_000);r.register_opportunity(Opportunity{id:"x".into(),name:"x".into(),hypothesis:"h".into(),expected_revenue_cents:100,expected_cost_cents:1,confidence_bps:9000});for _ in 0..5{let result=r.run_cycle();assert_eq!(result.kind,"revenue");}assert_eq!(r.opportunities[0].stage,os_revenue::RevenueStage::Measuring)}
 #[test]fn goal_materializes_and_completes(){let mut r=Runtime::new(100_000);let result=r.run_cycle();assert_eq!(result.kind,"task");assert_eq!(r.goals.goals.get("goal:boot-health").unwrap().status,GoalStatus::Completed);assert!(r.events.all().iter().any(|e|matches!(e,Event::GoalMaterialized{goal_id,..} if goal_id=="goal:boot-health")));assert!(r.events.all().iter().any(|e|matches!(e,Event::GoalCompleted{goal_id,success:true} if goal_id=="goal:boot-health")));}
@@ -371,6 +408,8 @@ fn parse_stage(s:&str)->Option<os_revenue::RevenueStage>{match s{"Discovered"=>S
  #[test]fn queued_task_recovers(){let path=std::env::temp_dir().join(format!("haze-queue-{}.tsv",std::process::id()));let mut r=Runtime::new(100_000);r.queue_task("agent-04",DecisionClass::ReadOnly,0,ToolRequest::RunCommand{program:"rustc".into(),args:vec!["--version".into(),"--verbose".into()]},false);r.save_state(&path).unwrap();let mut n=Runtime::new(1);n.load_state(&path).unwrap();assert_eq!(n.pending_tasks.len(),1);assert_eq!(n.pending_tasks[0].agent,"agent-04");assert_eq!(n.pending_tasks[0].tool.name(),"run_command");let _=std::fs::remove_file(path);}
  #[test]fn readonly_executes_real_tool(){let mut r=Runtime::new(100_000);r.context.workspace_root=std::env::temp_dir();let result=r.submit_task("agent-02",DecisionClass::ReadOnly,0,ToolRequest::ReadFile{path:PathBuf::from("haze-os-runtime-test.txt")},false);assert_eq!(result.status,TaskStatus::Failed);assert!(r.snapshot().events>=4);
 }
+ #[test]fn agent_workspace_context_isolated(){let base=std::env::temp_dir().join(format!("haze-agent-context-{}",std::process::id()));std::fs::create_dir_all(&base).unwrap();let mut r=Runtime::new(100_000);r.context.workspace_root=base.clone();let context=r.agent_execution_context("agent-04").unwrap();assert_eq!(context.workspace_root,base.join("workspaces/agent-04"));assert!(context.workspace_root.is_dir());assert_ne!(context.workspace_root,base);let _=std::fs::remove_dir_all(base);}
+
 }
 
 fn default_work_graph(agents:&[Agent])->WorkGraph {
