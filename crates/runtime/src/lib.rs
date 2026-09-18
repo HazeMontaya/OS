@@ -22,7 +22,7 @@ use std::time::Duration;
 #[derive(Clone,Debug)] pub struct Agent{pub id:String,pub role:String}
 #[derive(Clone,Debug)] pub struct CycleResult{pub kind:String,pub agent:String,pub summary:String,pub success:bool}
 #[derive(Clone,Debug)] pub struct RuntimeSnapshot{pub agents:Vec<Agent>,pub treasury:TreasurySnapshot,pub survival:SurvivalDecision,pub opportunities:usize,pub changes:usize,pub events:usize,pub queued_tasks:usize,pub customers:usize,pub outstanding_invoices_cents:i64,pub work_items:usize,pub workspaces:usize,pub decisions:usize,pub model_candidates:usize,pub goals:usize,pub system_entities:usize,pub system_relations:usize,pub system_evidence:usize,pub scheduled_jobs:usize,pub observations:usize}
-#[derive(Clone,Debug)] pub struct QueuedTask{pub agent:String,pub class:DecisionClass,pub cost:i64,pub tool:ToolRequest,pub approval:bool}
+#[derive(Clone,Debug)] pub struct QueuedTask{pub agent:String,pub class:DecisionClass,pub cost:i64,pub tool:ToolRequest,pub approval:bool,pub goal_id:Option<String>}
 
 #[derive(serde::Serialize, serde::Deserialize)]
 struct PersistedOrchestrationState {
@@ -80,11 +80,13 @@ impl Runtime{
   }
   Err(last_error.unwrap_or_else(||ModelError::Unavailable("all model candidates failed".into())))
  }
- pub fn queue_task(&mut self,agent:impl Into<String>,class:DecisionClass,cost:i64,tool:ToolRequest,approval:bool){self.pending_tasks.push(QueuedTask{agent:agent.into(),class,cost:cost.max(0),tool,approval});}
+ pub fn queue_task(&mut self,agent:impl Into<String>,class:DecisionClass,cost:i64,tool:ToolRequest,approval:bool){self.pending_tasks.push(QueuedTask{agent:agent.into(),class,cost:cost.max(0),tool,approval,goal_id:None});}
  pub fn execute_next_queued_task(&mut self)->Option<ExecutionResult>{
      let task=self.pending_tasks.first()?.clone();
      self.pending_tasks.remove(0);
-     Some(self.submit_task(&task.agent,task.class,task.cost,task.tool,task.approval))
+     let result=self.submit_task(&task.agent,task.class,task.cost,task.tool,task.approval);
+     if let Some(goal_id)=task.goal_id { let _=self.goals.set_status(&goal_id,if result.status==TaskStatus::Completed {GoalStatus::Completed}else{GoalStatus::Failed}); }
+     Some(result)
  }
  pub fn submit_task(&mut self,agent:&str,class:DecisionClass,cost:i64,tool:ToolRequest,approval:bool)->ExecutionResult{
   let snap=self.snapshot();let task=AgentTask{id:format!("task-{:06}",self.next_task),agent:agent.into(),class,estimated_cost_cents:cost.max(0),status:TaskStatus::Queued,tool};
@@ -178,7 +180,7 @@ impl Runtime{
   count
  }
  pub fn queue_task_with_goal(&mut self,agent:String,class:DecisionClass,cost:i64,tool:ToolRequest,approval:bool,goal_id:String){
-  self.pending_tasks.push(QueuedTask{agent,class,cost:cost.max(0),tool,approval});
+  self.pending_tasks.push(QueuedTask{agent,class,cost:cost.max(0),tool,approval,goal_id:Some(goal_id.clone())});
   self.memory.remember("agent-01","goal-plan",format!("goal {goal_id} materialized into executable task"));
  }
  pub fn run_cycle(&mut self) -> CycleResult {
@@ -227,7 +229,7 @@ impl Runtime{
      writeln!(f,"treasury\t{}\t{}\t{}\t{}\t{}",s.balance_cents,s.reserved_cents,s.revenue_cents,s.expense_cents,s.burn_rate_cents_per_day)?;
      writeln!(f,"next_task\t{}",self.next_task)?;
      for task in &self.pending_tasks {
-         write!(f,"task\t{}\t{:?}\t{}\t{}\t{}",esc(&task.agent),task.class,task.cost,task.approval,tool_kind(&task.tool))?;
+         write!(f,"task\t{}\t{:?}\t{}\t{}\t{}\t{}",esc(&task.agent),task.class,task.cost,task.approval,task.goal_id.as_deref().map(esc).unwrap_or_default(),tool_kind(&task.tool))?;
          match &task.tool {
              ToolRequest::ReadFile{path} => writeln!(f,"\t{}",esc(&path.to_string_lossy()))?,
              ToolRequest::WriteFile{path,content} => writeln!(f,"\t{}\t{}",esc(&path.to_string_lossy()),esc(content))?,
@@ -252,10 +254,11 @@ impl Runtime{
              "next_task" => if let Some(v)=p.next(){if let Ok(n)=v.parse::<u64>(){self.next_task=n.max(1);}}
              "task" => {
                  let v:Vec<_>=p.collect();
-                 if v.len()>=6 {
+                 if v.len()>=7 {
                      if let (Some(class),Ok(cost),Ok(approval))=(parse_decision_class(v[1]),v[2].parse::<i64>(),v[3].parse::<bool>()) {
-                         if let Some(tool)=parse_tool(v[4],&v[5..]) {
-                             self.pending_tasks.push(QueuedTask{agent:unesc(v[0]),class,cost:cost.max(0),tool,approval});
+                         let goal_id=if v[4].is_empty(){None}else{Some(unesc(v[4]))};
+                         if let Some(tool)=parse_tool(v[5],&v[6..]) {
+                             self.pending_tasks.push(QueuedTask{agent:unesc(v[0]),class,cost:cost.max(0),tool,approval,goal_id});
                          }
                      }
                  }
