@@ -62,6 +62,15 @@ impl GoalGraph {
 
     pub fn set_status(&mut self, id: &str, status: GoalStatus) -> Result<(), String> {
         let goal=self.goals.get_mut(id).ok_or_else(|| "unknown goal".to_string())?;
+        let current=goal.status;
+        let allowed=matches!((current,status),
+            (GoalStatus::Proposed,GoalStatus::Active|GoalStatus::Blocked|GoalStatus::Cancelled) |
+            (GoalStatus::Active,GoalStatus::Completed|GoalStatus::Failed|GoalStatus::Blocked|GoalStatus::Cancelled) |
+            (GoalStatus::Blocked,GoalStatus::Active|GoalStatus::Cancelled) |
+            (GoalStatus::Failed,GoalStatus::Active|GoalStatus::Cancelled) |
+            (GoalStatus::Completed,GoalStatus::Completed) |
+            (GoalStatus::Cancelled,GoalStatus::Cancelled));
+        if !allowed { return Err(format!("invalid goal transition {:?} -> {:?}",current,status)); }
         goal.status=status;
         Ok(())
     }
