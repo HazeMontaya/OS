@@ -1,5 +1,8 @@
 use os_agents::{AgentRegistry, AgentSpec};
 use os_automation::AutomationGraph;
+use os_economy::Treasury;
+use os_governance::GovernancePolicy;
+use os_survival::SurvivalDecision;
 use os_system::SystemDescriptor;
 use os_tools::{ToolManifest, ToolRegistry, ToolRisk};
 use serde::{Deserialize, Serialize};
@@ -12,6 +15,8 @@ pub struct RuntimeCatalog {
     pub tools: ToolRegistry,
     pub automations: BTreeMap<String, AutomationGraph>,
     pub system: SystemDescriptor,
+    pub treasury: Treasury,
+    pub governance: GovernancePolicy,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -22,27 +27,34 @@ pub struct RuntimeSnapshot {
     pub platform: String,
     pub architecture: String,
     pub surfaces: Vec<String>,
+    pub treasury_balance_cents: i64,
+    pub runway_days: Option<u64>,
+    pub economic_mode: os_economy::EconomicMode,
 }
 
 impl RuntimeCatalog {
     pub fn with_defaults() -> Self {
         let mut agents = AgentRegistry::default();
-        let mut core = AgentSpec::new(
-            "OS Core",
-            "Coordinate cognition, retrieval, models, tools and verification",
-        );
-        core.capabilities = vec![
-            "Memory.Read".into(),
-            "Knowledge.Read".into(),
-            "Model.Invoke".into(),
+        let definitions = [
+            ("Governor", "Maintain strategic objectives, economic solvency and policy compliance"),
+            ("Research", "Discover and validate high-value opportunities"),
+            ("Business", "Turn validated opportunities into customers and revenue"),
+            ("Engineering", "Build, test and maintain software"),
+            ("Content", "Produce and optimize useful content"),
+            ("Finance", "Measure treasury, costs, revenue and runway"),
+            ("Operations", "Execute approved workflows and maintain services"),
+            ("QA", "Verify outputs, releases and economic claims"),
+            ("Security", "Enforce capabilities, sandboxing and audit requirements"),
         ];
-        agents.register(core).expect("default agent id is unique");
+        for (name, objective) in definitions {
+            let mut spec = AgentSpec::new(name, objective);
+            spec.capabilities = vec!["Memory.Read".into(), "Knowledge.Read".into(), "Model.Invoke".into()];
+            agents.register(spec).expect("default agent id is unique");
+        }
 
         let mut tools = ToolRegistry::default();
         for manifest in default_tools() {
-            tools
-                .register(manifest)
-                .expect("default tool ids are unique");
+            tools.register(manifest).expect("default tool ids are unique");
         }
 
         Self {
@@ -50,10 +62,17 @@ impl RuntimeCatalog {
             tools,
             automations: BTreeMap::new(),
             system: SystemDescriptor::detect(),
+            treasury: Treasury::new(0),
+            governance: GovernancePolicy::default(),
         }
     }
 
+    pub fn survival_decision(&self) -> SurvivalDecision {
+        os_survival::decide(self.treasury.snapshot(), os_economy::SurvivalThresholds::default())
+    }
+
     pub fn snapshot(&self) -> RuntimeSnapshot {
+        let treasury = self.treasury.snapshot();
         RuntimeSnapshot {
             agent_count: self.agents.list().count(),
             tool_count: self.tools.list().count(),
@@ -61,15 +80,13 @@ impl RuntimeCatalog {
             platform: self.system.platform.clone(),
             architecture: self.system.architecture.clone(),
             surfaces: vec![
-                "main".into(),
-                "knowledge".into(),
-                "memory".into(),
-                "agents".into(),
-                "developer".into(),
-                "system".into(),
-                "settings".into(),
-                "automation".into(),
+                "main".into(), "knowledge".into(), "memory".into(), "agents".into(),
+                "developer".into(), "system".into(), "settings".into(), "automation".into(),
+                "economy".into(), "treasury".into(), "governance".into(),
             ],
+            treasury_balance_cents: treasury.balance_cents,
+            runway_days: treasury.runway_days,
+            economic_mode: treasury.mode,
         }
     }
 }
@@ -111,9 +128,11 @@ mod tests {
     use super::*;
 
     #[test]
-    fn bootstrap_exposes_all_product_surfaces() {
-        let snapshot = RuntimeCatalog::with_defaults().snapshot();
-        assert_eq!(snapshot.surfaces.len(), 8);
-        assert!(snapshot.tool_count >= 3);
+    fn bootstrap_exposes_economic_agent_organization() {
+        let runtime = RuntimeCatalog::with_defaults();
+        let snapshot = runtime.snapshot();
+        assert_eq!(snapshot.agent_count, 9);
+        assert_eq!(snapshot.surfaces.len(), 11);
+        assert_eq!(snapshot.economic_mode, os_economy::EconomicMode::Explore);
     }
 }
