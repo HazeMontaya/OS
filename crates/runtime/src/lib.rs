@@ -17,6 +17,8 @@ pub struct RuntimeCatalog {
     pub system: SystemDescriptor,
     pub treasury: Treasury,
     pub governance: GovernancePolicy,
+    pub opportunities: Vec<os_revenue::Opportunity>,
+    pub changes: Vec<os_evolution::ChangeProposal>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -64,7 +66,23 @@ impl RuntimeCatalog {
             system: SystemDescriptor::detect(),
             treasury: Treasury::new(0),
             governance: GovernancePolicy::default(),
+            opportunities: Vec::new(),
+            changes: Vec::new(),
         }
+    }
+
+    pub fn register_opportunity(&mut self, opportunity: os_revenue::Opportunity) -> bool {
+        let decision = self.survival_decision();
+        if opportunity.is_actionable(decision.mode, decision.max_experiment_cents) {
+            self.opportunities.push(opportunity);
+            true
+        } else {
+            false
+        }
+    }
+
+    pub fn register_change(&mut self, change: os_evolution::ChangeProposal) {
+        self.changes.push(change);
     }
 
     pub fn survival_decision(&self) -> SurvivalDecision {
