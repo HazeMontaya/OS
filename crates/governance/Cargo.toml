@@ -1,0 +1,11 @@
+[package]
+name = "os-governance"
+version.workspace = true
+edition.workspace = true
+publish = false
+
+[dependencies]
+os-economy = { path = "../economy" }
+os-system = { path = "../system" }
+serde.workspace = true
+thiserror.workspace = true
