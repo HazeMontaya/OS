@@ -46,5 +46,3 @@ mod tests {
         assert_eq!(p.advance().unwrap(),RevenueStage::Validating);
     }
 }
-
-}
