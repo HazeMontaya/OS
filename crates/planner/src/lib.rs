@@ -34,7 +34,7 @@ mod tests{
  use super::*;
  #[test]fn plans_maintenance_when_idle(){
    let t=TreasurySnapshot{balance_cents:1000,reserved_cents:0,revenue_cents:0,expense_cents:0,burn_rate_cents_per_day:100,runway_days:Some(10),mode:EconomicMode::Optimize};
-   let p=RulePlanner.plan(PlannerInput{treasury:t,opportunities:&[],queued_tasks:0});
+   let p=RulePlanner::default().plan(PlannerInput{treasury:t,opportunities:&[],queued_tasks:0});
    assert_eq!(p.len(),1);
  }
 }
