@@ -163,7 +163,7 @@ fn parse_stage(s:&str)->Option<os_revenue::RevenueStage>{match s{"Discovered"=>S
 #[cfg(test)]mod tests{
  use super::*;
  #[test]fn boots(){assert_eq!(Runtime::new(100_000).agents.len(),9)}
- #[test]fn autonomous_cycle_runs(){let mut r=Runtime::new(100_000);let result=r.run_cycle();assert_eq!(result.agent,"agent-02");assert!(r.snapshot().events>0)}
+ #[test]fn autonomous_cycle_runs(){let mut r=Runtime::new(100_000);let result=r.run_cycle();assert_eq!(result.agent,"scheduler");assert!(r.snapshot().events>0)}
  #[test]fn revenue_cycles_through_stages(){let mut r=Runtime::new(100_000);r.register_opportunity(Opportunity{id:"x".into(),name:"x".into(),hypothesis:"h".into(),expected_revenue_cents:100,expected_cost_cents:1,confidence_bps:9000});for _ in 0..5{let result=r.run_cycle();assert_eq!(result.kind,"revenue");}assert_eq!(r.opportunities[0].stage,os_revenue::RevenueStage::Measuring)}
  #[test]fn queue_dispatches_task(){let mut r=Runtime::new(100_000);r.queue_task("agent-04",DecisionClass::ReadOnly,0,ToolRequest::RunCommand{program:"rustc".into(),args:vec!["--version".into()]},false);assert_eq!(r.snapshot().queued_tasks,1);let x=r.run_cycle();assert_eq!(x.kind,"task");assert_eq!(r.snapshot().queued_tasks,0)}
  #[test]fn state_recovers_treasury(){let path=std::env::temp_dir().join(format!("haze-state-{}.tsv",std::process::id()));let mut r=Runtime::new(100_000);r.record_revenue(500,"test");r.save_state(&path).unwrap();let mut n=Runtime::new(1);n.load_state(&path).unwrap();assert_eq!(n.snapshot().treasury.balance_cents,100_500);let _=std::fs::remove_file(path)}
