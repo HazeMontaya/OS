@@ -32,7 +32,7 @@ impl Runtime{
   let mut treasury=Treasury::new(initial_balance_cents);treasury.set_burn_rate(100);
   let model=EnvModelConfig::from_env();
   let mut model_router=ModelRouter::default();
-  if model.provider != "none" { model_router.register(ModelCandidate { provider:model.provider.clone(), model:model.model.clone(), healthy:true, remaining_quota_tokens:usize::MAX, estimated_cost_micros:0, latency_ms:u32::MAX }); }
+  if model.provider != "none" { model_router.register(ModelCandidate { provider:model.provider.clone(), model:model.model.clone(), healthy:true, remaining_quota_tokens:usize::MAX, estimated_cost_micros:0, latency_ms:env_latency_ms(), capabilities:env_model_capabilities() }); }
   let work_graph=default_work_graph(&agents);
   let mut workspaces=WorkspaceRegistry::default();
   for agent in &agents { workspaces.ensure(&agent.id, format!("workspaces/{}", agent.id)); }
@@ -307,3 +307,6 @@ fn now_ms() -> u128 {
     std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).map(|d|d.as_millis()).unwrap_or(0)
 }
 
+
+fn env_latency_ms() -> u32 { std::env::var("OS_MODEL_LATENCY_MS").ok().and_then(|v|v.parse::<u32>().ok()).unwrap_or(10_000) }
+fn env_model_capabilities() -> Vec<String> { std::env::var("OS_MODEL_CAPABILITIES").ok().map(|v|v.split(',').map(|x|x.trim().to_string()).filter(|x|!x.is_empty()).collect()).unwrap_or_default() }
