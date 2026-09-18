@@ -43,7 +43,7 @@ button{font:inherit;color:inherit;background:none;border:0}
 .btn:hover{border-color:var(--cyan2)}
 .btn.primary{background:#12303a;border-color:#2d6d7d}
 .main{grid-column:2;min-width:0;min-height:0;display:grid;grid-template-rows:88px minmax(0,1fr) 214px;gap:10px;padding:10px}
-.metrics{display:grid;grid-template-columns:repeat(6,minmax(0,1fr));gap:8px}
+.metrics{display:grid;grid-template-columns:repeat(8,minmax(0,1fr));gap:8px}
 .metric{background:linear-gradient(180deg,#0e141c,#0b1017);border:1px solid var(--line);border-radius:10px;padding:11px 12px;box-shadow:var(--shadow)}
 .metric .label{color:var(--muted);font-size:10px;text-transform:uppercase;letter-spacing:.12em}
 .metric .value{margin-top:6px;font-size:21px;font-weight:700;letter-spacing:-.02em}
@@ -143,6 +143,8 @@ background-size:48px 48px,48px 48px,auto;box-shadow:inset 0 0 80px rgba(0,0,0,.3
     <div class="metric"><div class="label">Agents</div><div class="value" id="agents">—</div><div class="sub">registered workers</div></div>
     <div class="metric"><div class="label">Opportunities</div><div class="value" id="opps">—</div><div class="sub">active revenue paths</div></div>
     <div class="metric"><div class="label">Events</div><div class="value" id="events">—</div><div class="sub">audit log entries</div></div>
+    <div class="metric"><div class="label">Models</div><div class="value" id="models">—</div><div class="sub">routable candidates</div></div>
+    <div class="metric"><div class="label">System</div><div class="value" id="system">—</div><div class="sub">evidence-backed objects</div></div>
   </section>
 
   <section class="workspace">
@@ -210,13 +212,15 @@ background-size:48px 48px,48px 48px,auto;box-shadow:inset 0 0 80px rgba(0,0,0,.3
 let timer=null;
 function esc(s){return String(s).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]))}
 function fmtCents(v){return Number(v||0).toLocaleString('de-DE')+'¢'}
-function render(s){
+function render(s,models,system){
   document.querySelector('#balance').textContent=fmtCents(s.treasury.balance_cents);
   document.querySelector('#runway').textContent=s.treasury.runway_days==null?'∞':s.treasury.runway_days+'d';
   document.querySelector('#revenue').textContent=fmtCents(s.treasury.revenue_cents);
   document.querySelector('#agents').textContent=s.agents.length;
   document.querySelector('#opps').textContent=s.opportunities;
   document.querySelector('#events').textContent=s.events;
+  document.querySelector('#models').textContent=(models||[]).length;
+  document.querySelector('#system').textContent=(system||{entities:[]}).entities.length;
   document.querySelector('#mode').textContent=s.treasury.mode;
   document.querySelector('#queue').textContent=s.queued_tasks;
   document.querySelector('#queued2').textContent=s.queued_tasks;
@@ -231,7 +235,7 @@ function render(s){
   }
   document.querySelector('#lastAction').textContent=recent[0]||'waiting';
 }
-async function state(){const r=await fetch('/api/state');if(!r.ok)throw new Error('state '+r.status);render(await r.json())}
+async function state(){const [a,b,d]=await Promise.all([fetch('/api/state'),fetch('/api/models'),fetch('/api/system')]);if(!a.ok||!b.ok||!d.ok)throw new Error('runtime state unavailable');render(await a.json(),await b.json(),await d.json())}
 async function tick(){const r=await fetch('/api/tick',{method:'POST'});const x=await r.json();document.querySelector('#lastAction').textContent=x.summary||x.kind;await state()}
 function toggle(){const b=document.querySelector('#auto');if(timer){clearInterval(timer);timer=null;b.textContent='Auto: off'}else{timer=setInterval(()=>tick().catch(()=>{}),5000);b.textContent='Auto: on';tick().catch(()=>{})}}
 document.querySelectorAll('.agent').forEach(el=>el.addEventListener('click',()=>{document.querySelector('#sel').textContent=el.querySelector('.role').textContent}));
