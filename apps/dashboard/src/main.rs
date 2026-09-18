@@ -4,7 +4,7 @@ use std::io::{Read, Write};
 use std::net::{TcpListener, TcpStream};
 
 fn json_escape(s: &str) -> String {
-    s.replace('\\', "\\\\").replace('"', "\\"").replace('\n', "\\n").replace('\r', "\\r")
+    s.replace('\\', "\\\\").replace('"', "\\\"").replace('\n', "\\n").replace('\r', "\\r")
 }
 fn response(stream: &mut TcpStream, status: &str, content_type: &str, body: &str) {
     let header = format!(
