@@ -47,6 +47,22 @@ pub fn persist_memory(&self, path: impl AsRef<std::path::Path>) -> std::io::Resu
 }
 
 pub fn register_opportunity(&mut self,o:Opportunity){self.opportunities.push(RevenueProject::new(o))}
+
+pub fn next_revenue_project(&self) -> Option<usize> {
+    let mode = self.snapshot().treasury.mode;
+    self.opportunities.iter().enumerate()
+        .filter(|(_, p)| p.stage == os_revenue::RevenueStage::Discovered && p.opportunity.actionable(mode))
+        .max_by_key(|(_, p)| p.opportunity.expected_value_cents())
+        .map(|(i, _)| i)
+}
+
+pub fn advance_best_revenue_project(&mut self) -> Option<os_revenue::RevenueStage> {
+    let index = self.next_revenue_project()?;
+    let project = &mut self.opportunities[index];
+    let stage = project.advance().ok()?;
+    self.memory.remember("agent-03", "revenue", format!("{} advanced to {:?}", project.opportunity.name, stage));
+    Some(stage)
+}
  pub fn register_change(&mut self,p:ChangeProposal){self.changes.push(p)}
  pub fn record_revenue(&mut self,cents:i64,memo:impl Into<String>){let memo=memo.into();self.treasury.record_revenue(cents,memo.clone());self.events.push(Event::RevenueRecorded{cents,memo});}
  pub fn record_expense(&mut self,cents:i64,memo:impl Into<String>)->Result<(),&'static str>{let memo=memo.into();let r=self.treasury.record_expense(cents,memo.clone());if r.is_ok(){self.events.push(Event::ExpenseRecorded{cents,memo});}r}
