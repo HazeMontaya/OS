@@ -11,6 +11,7 @@ fn main() {
     let events = std::path::PathBuf::from(".os/events.log");
     let memory = std::path::PathBuf::from(".os/memory.log");
     if let Err(e) = runtime.load_state(&state) { eprintln!("state recovery warning: {e}"); }
+    if let Err(e) = runtime.load_journals(&events, &memory) { eprintln!("journal recovery warning: {e}"); }
     if !runtime.opportunities.iter().any(|p| p.opportunity.id == "bootstrap-product") {
         runtime.register_opportunity(Opportunity {
             id: "bootstrap-product".into(),
