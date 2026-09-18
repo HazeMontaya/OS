@@ -12,12 +12,17 @@ Autonomous multi-agent runtime with economic controls, governed tool execution, 
 - **Revenue engine:** opportunity scoring and lifecycle from discovery through measurement.
 - **Autonomous runtime:** single cycles, bounded cycle batches, and a continuous stop-controlled loop.
 - **Audit events:** task, tool, heartbeat, revenue and accounting events.
-- **Dashboard:** browser UI showing live runtime state and agent world; the UI can trigger autonomous cycles.
+- **Dashboard:** browser UI showing live runtime state, agents, treasury and events; the UI can trigger autonomous cycles.
+- **Capability registry:** execution tools are explicitly registered and checked against governance decision classes.
+- **Research connector:** allowlisted outbound HTTP research with timeout and response-size limits.
+- **Commerce foundation:** customers, sales stages, invoices and a payment-provider interface; real payment execution remains owner-controlled.
+- **Model provider:** opt-in OpenAI Responses API adapter via environment-managed credentials.
 
 ## Continuous operation
 
 The CLI now runs the runtime continuously until a manual stop command is entered:
 
+    set CARGO_INCREMENTAL=0
     cargo run -p os-cli
 
 Then type:
@@ -48,7 +53,7 @@ The dashboard is intentionally local-only by default. It does not expose the run
 
 ## Important runtime boundary
 
-This repository contains real execution capabilities, but it is not yet a hardened production sandbox. Command execution is allowlisted and file access is constrained to the configured workspace, but there is currently no OS-level container isolation, CPU/memory quota, process timeout, secrets manager, payment provider, customer CRM, or production deployment controller.
+This repository contains real execution capabilities, but it is not yet a hardened production sandbox. Command execution is allowlisted and file access is constrained to the configured workspace, but there is currently no OS-level container isolation, CPU/memory quota, secrets manager, production payment gateway, or production deployment controller.
 
 Revenue accounting is an internal ledger. Recording revenue does not itself move money. Real payments require an explicitly configured payment/billing integration and owner-controlled credentials.
 
