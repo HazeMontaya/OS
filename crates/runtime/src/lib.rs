@@ -6,6 +6,7 @@ use os_execution::{AgentTask,ExecutionContext,ExecutionEngine,ExecutionResult,Ta
 use os_governance::DecisionClass;
 use os_revenue::{Opportunity,RevenueProject};
 use os_survival::SurvivalDecision;
+use os_planner::{Planner,PlannerInput,RulePlanner};
 use std::path::PathBuf;
 use std::sync::atomic::{AtomicBool,Ordering};
 use std::time::Duration;
@@ -16,14 +17,14 @@ use std::time::Duration;
 #[derive(Clone,Debug)] pub struct QueuedTask{pub agent:String,pub class:DecisionClass,pub cost:i64,pub tool:ToolRequest,pub approval:bool}
 pub struct Runtime{
  pub agents:Vec<Agent>,pub treasury:Treasury,pub opportunities:Vec<RevenueProject>,pub changes:Vec<ChangeProposal>,
- pub execution:ExecutionEngine,pub pending_tasks:Vec<QueuedTask>,pub events:EventLog,pub memory:Memory,pub context:ExecutionContext,thresholds:SurvivalThresholds,next_task:u64
+ pub execution:ExecutionEngine,pub planner:RulePlanner,pub pending_tasks:Vec<QueuedTask>,pub events:EventLog,pub memory:Memory,pub context:ExecutionContext,thresholds:SurvivalThresholds,next_task:u64
 }
 impl Runtime{
  pub fn new(initial_balance_cents:i64)->Self{
   let roles=["Governor","Research","Business","Engineering","Content","Finance","Operations","QA","Security"];
   let agents=roles.iter().enumerate().map(|(i,r)|Agent{id:format!("agent-{:02}",i+1),role:(*r).into()}).collect();
   let mut treasury=Treasury::new(initial_balance_cents);treasury.set_burn_rate(100);
-  Self{agents,treasury,opportunities:vec![],changes:vec![],execution:ExecutionEngine::default(),pending_tasks:vec![],events:EventLog::default(),memory:Memory::default(),
+  Self{agents,treasury,opportunities:vec![],changes:vec![],execution:ExecutionEngine::default(),planner:RulePlanner::default(),pending_tasks:vec![],events:EventLog::default(),memory:Memory::default(),
    context:ExecutionContext{workspace_root:PathBuf::from("."),allowed_commands:vec!["cargo".into(),"rustc".into(),"git".into()]},
    thresholds:SurvivalThresholds{explore_days:30,operate_days:14,optimize_days:7,emergency_days:2},next_task:1}
  }
@@ -72,7 +73,7 @@ impl Runtime{
  }
  pub fn run_cycle(&mut self) -> CycleResult {
   let mode = self.snapshot().treasury.mode;
-  self.memory.remember("agent-01", "cycle", format!("autonomous cycle started in {:?}", mode));
+  self.memory.remember("agent-01", "cycle", format!("autonomous cycle started in {:?}", mode));\n  if self.pending_tasks.is_empty() {\n      let plans=self.planner.plan(PlannerInput{treasury:self.snapshot().treasury.clone(),opportunities:&self.opportunities,queued_tasks:self.pending_tasks.len()});\n      for p in plans { self.queue_task(p.agent,p.class,p.estimated_cost_cents,p.tool,p.approval); self.memory.remember("agent-01","plan",p.reason); }\n  }
   if let Some(result) = self.execute_next_queued_task() { return CycleResult { kind: "task".into(), agent: "scheduler".into(), summary: result.message.clone(), success: result.status == TaskStatus::Completed }; }\n  if let Some(index) = self.next_revenue_project() {
       let name = self.opportunities[index].opportunity.name.clone();
       if let Some(stage) = self.advance_best_revenue_project() {
@@ -145,7 +146,8 @@ impl Runtime{
  pub fn record_expense(&mut self,cents:i64,memo:impl Into<String>)->Result<(),&'static str>{let memo=memo.into();let r=self.treasury.record_expense(cents,memo.clone());if r.is_ok(){self.events.push(Event::ExpenseRecorded{cents,memo});}r}
 }
 
-fn esc(s:&str)->String{s.replace('\\',"\\\\").replace('\t',"\\t").replace('\n',"\\n").replace('\r',"\\r")}
+fn esc(s:&str)->String{s.replace('\\',"\\\\").replace('\t',"\\t").replace('\n',"
+").replace('\r',"\\r")}
 fn unesc(s:&str)->String{let mut o=String::new();let mut c=s.chars();while let Some(x)=c.next(){if x=='\\'{match c.next(){Some('t')=>o.push('\t'),Some('n')=>o.push('\n'),Some('r')=>o.push('\r'),Some('\\')=>o.push('\\'),Some(y)=>{o.push('\\');o.push(y)},None=>o.push('\\')}}else{o.push(x)}}o}
 fn parse_stage(s:&str)->Option<os_revenue::RevenueStage>{match s{"Discovered"=>Some(os_revenue::RevenueStage::Discovered),"Validating"=>Some(os_revenue::RevenueStage::Validating),"Building"=>Some(os_revenue::RevenueStage::Building),"Selling"=>Some(os_revenue::RevenueStage::Selling),"Delivering"=>Some(os_revenue::RevenueStage::Delivering),"Measuring"=>Some(os_revenue::RevenueStage::Measuring),"Stopped"=>Some(os_revenue::RevenueStage::Stopped),_=>None}}
 
