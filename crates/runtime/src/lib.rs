@@ -21,6 +21,14 @@ use std::time::Duration;
 #[derive(Clone,Debug)] pub struct CycleResult{pub kind:String,pub agent:String,pub summary:String,pub success:bool}
 #[derive(Clone,Debug)] pub struct RuntimeSnapshot{pub agents:Vec<Agent>,pub treasury:TreasurySnapshot,pub survival:SurvivalDecision,pub opportunities:usize,pub changes:usize,pub events:usize,pub queued_tasks:usize,pub customers:usize,pub outstanding_invoices_cents:i64,pub work_items:usize,pub workspaces:usize,pub decisions:usize,pub model_candidates:usize,pub system_entities:usize,pub system_relations:usize,pub system_evidence:usize}
 #[derive(Clone,Debug)] pub struct QueuedTask{pub agent:String,pub class:DecisionClass,pub cost:i64,pub tool:ToolRequest,pub approval:bool}
+
+#[derive(serde::Serialize, serde::Deserialize)]
+struct PersistedOrchestrationState {
+    work_items: Vec<WorkItem>,
+    workspaces: Vec<os_orchestration::AgentWorkspace>,
+    decisions: Vec<DecisionRecord>,
+}
+
 pub struct Runtime{
  pub agents:Vec<Agent>,pub treasury:Treasury,pub opportunities:Vec<RevenueProject>,pub changes:Vec<ChangeProposal>,
  pub execution:ExecutionEngine,pub model:EnvModelConfig,pub model_router:ModelRouter,pub planner:RulePlanner,pub commerce:Commerce,pub research_policy:ResearchPolicy,pub pending_tasks:Vec<QueuedTask>,pub events:EventLog,pub memory:Memory,pub context:ExecutionContext,pub work_graph:WorkGraph,pub work_items:Vec<WorkItem>,pub workspaces:WorkspaceRegistry,pub decisions:Vec<DecisionRecord>,pub system_model:SystemModel,thresholds:SurvivalThresholds,next_task:u64
@@ -158,7 +166,7 @@ impl Runtime{
          }
      }
      for p in &self.opportunities { writeln!(f,"opportunity\t{}\t{}\t{}\t{}\t{}\t{}\t{:?}",esc(&p.opportunity.id),esc(&p.opportunity.name),esc(&p.opportunity.hypothesis),p.opportunity.expected_revenue_cents,p.opportunity.expected_cost_cents,p.opportunity.confidence_bps,p.stage)?; }
-     f.sync_all()?; std::fs::rename(tmp,path)?; self.system_model.save_json(path.with_extension("system.json"))?; Ok(())
+     f.sync_all()?; std::fs::rename(tmp,path)?; self.system_model.save_json(path.with_extension("system.json"))?; let orchestration=PersistedOrchestrationState{work_items:self.work_items.clone(),workspaces:self.workspaces.all().cloned().collect(),decisions:self.decisions.clone()}; let data=serde_json::to_vec_pretty(&orchestration).map_err(|e|std::io::Error::new(std::io::ErrorKind::InvalidData,e.to_string()))?; std::fs::write(path.with_extension("orchestration.json"),data)?; Ok(())
  }
  pub fn load_state(&mut self, path: impl AsRef<std::path::Path>) -> std::io::Result<()> {
      use std::io::{BufRead,BufReader};
@@ -183,6 +191,8 @@ impl Runtime{
          }
      }
      self.system_model=SystemModel::load_json(path.as_ref().with_extension("system.json"))?;
+     let orchestration_path=path.as_ref().with_extension("orchestration.json");
+     if let Ok(data)=std::fs::read(&orchestration_path) { if let Ok(orchestration)=serde_json::from_slice::<PersistedOrchestrationState>(&data) { self.work_items=orchestration.work_items; self.workspaces.replace_all(orchestration.workspaces); self.decisions=orchestration.decisions; } }
      Ok(())
  }
  pub fn load_journals(&mut self, events: impl AsRef<std::path::Path>, memory: impl AsRef<std::path::Path>) -> std::io::Result<()> {
