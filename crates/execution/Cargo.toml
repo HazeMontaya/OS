@@ -2,4 +2,4 @@
 name = "os-execution"
 version = "0.1.0"
 edition = "2021"
-dependencies = { os-economy = { path = "../economy" }, os-governance = { path = "../governance" }, os-survival = { path = "../survival" } }
+dependencies = { os-economy = { path = "../economy" }, os-governance = { path = "../governance" }, os-survival = { path = "../survival" }, os-capabilities = { path = "../capabilities" } }
