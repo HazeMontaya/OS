@@ -22,9 +22,9 @@ fn encode(e:&Event)->String{match e{
  Event::HeartbeatStarted{agent}=>format!("HeartbeatStarted\t{}",esc(agent)),Event::HeartbeatFinished{agent,status}=>format!("HeartbeatFinished\t{}\t{}",esc(agent),esc(status)),
  Event::RevenueStageAdvanced{opportunity_id,stage}=>format!("RevenueStageAdvanced\t{}\t{}",esc(opportunity_id),esc(stage)),
  Event::RevenueRecorded{cents,memo}=>format!("RevenueRecorded\t{}\t{}",cents,esc(memo)),Event::ExpenseRecorded{cents,memo}=>format!("ExpenseRecorded\t{}\t{}",cents,esc(memo))}}
-fn decode(line:&str)->Option<Event>{let mut p=line.split('\t');let k=p.next()?;let u=|x:Option<&str>|unesc(x?);Some(match k{
- "TaskQueued"=>Event::TaskQueued{task_id:u(p.next()),agent:u(p.next())},"TaskStarted"=>Event::TaskStarted{task_id:u(p.next())},"ToolCalled"=>Event::ToolCalled{task_id:u(p.next()),tool:u(p.next())},
- "ToolCompleted"=>Event::ToolCompleted{task_id:u(p.next()),tool:u(p.next()),success:p.next()?.parse().ok()?},"TaskCompleted"=>Event::TaskCompleted{task_id:u(p.next())},
- "TaskBlocked"=>Event::TaskBlocked{task_id:u(p.next()),reason:u(p.next())},"HeartbeatStarted"=>Event::HeartbeatStarted{agent:u(p.next())},"HeartbeatFinished"=>Event::HeartbeatFinished{agent:u(p.next()),status:u(p.next())},
- "RevenueStageAdvanced"=>Event::RevenueStageAdvanced{opportunity_id:u(p.next()),stage:u(p.next())},"RevenueRecorded"=>Event::RevenueRecorded{cents:p.next()?.parse().ok()?,memo:u(p.next())},"ExpenseRecorded"=>Event::ExpenseRecorded{cents:p.next()?.parse().ok()?,memo:u(p.next())},_=>return None})}
+fn decode(line:&str)->Option<Event>{let mut p=line.split('\t');let k=p.next()?;let u=|x:Option<&str>|x.map(unesc);Some(match k{
+ "TaskQueued"=>Event::TaskQueued{task_id:u(p.next())?,agent:u(p.next())?},"TaskStarted"=>Event::TaskStarted{task_id:u(p.next())?},"ToolCalled"=>Event::ToolCalled{task_id:u(p.next())?,tool:u(p.next())?},
+ "ToolCompleted"=>Event::ToolCompleted{task_id:u(p.next())?,tool:u(p.next())?,success:p.next()?.parse().ok()?},"TaskCompleted"=>Event::TaskCompleted{task_id:u(p.next())},
+ "TaskBlocked"=>Event::TaskBlocked{task_id:u(p.next())?,reason:u(p.next())?},"HeartbeatStarted"=>Event::HeartbeatStarted{agent:u(p.next())?},"HeartbeatFinished"=>Event::HeartbeatFinished{agent:u(p.next())?,status:u(p.next())?},
+ "RevenueStageAdvanced"=>Event::RevenueStageAdvanced{opportunity_id:u(p.next())?,stage:u(p.next())?},"RevenueRecorded"=>Event::RevenueRecorded{cents:p.next()?.parse().ok()?,memo:u(p.next())?},"ExpenseRecorded"=>Event::ExpenseRecorded{cents:p.next()?.parse().ok()?,memo:u(p.next())},_=>return None})}
 #[cfg(test)]mod tests{use super::*;#[test]fn journal_roundtrip(){let path=std::env::temp_dir().join(format!("haze-events-{}.log",std::process::id()));let mut l=EventLog::default();l.push(Event::RevenueRecorded{cents:42,memo:"a\tb".into()});l.append_journal(&path).unwrap();let loaded=EventLog::load_journal(&path).unwrap();assert_eq!(loaded.all(),l.all());let _=std::fs::remove_file(path);}}
