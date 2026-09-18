@@ -9,7 +9,7 @@ impl EventLog{
  pub fn push(&mut self,e:Event){self.events.push(e)}
  pub fn all(&self)->&[Event]{&self.events}
  pub fn len(&self)->usize{self.events.len()}
- pub fn append_journal(&self,path:impl AsRef<Path>)->io::Result<()> {let Some(e)=self.events.last() else{return Ok(())};let mut f=OpenOptions::new().create(true).append(true).open(path)?;writeln!(f,"{}",encode(e))}
+ pub fn append_journal(&self,path:impl AsRef<Path>)->io::Result<()> {let path=path.as_ref();let existing=match File::open(path){Ok(f)=>BufReader::new(f).lines().count(),Err(e) if e.kind()==io::ErrorKind::NotFound=>0,Err(e)=>return Err(e)};if existing>=self.events.len(){return Ok(());}let mut f=OpenOptions::new().create(true).append(true).open(path)?;for e in self.events.iter().skip(existing){writeln!(f,"{}",encode(e))?;}Ok(())}
  pub fn load_journal(path:impl AsRef<Path>)->io::Result<Self>{let f=match File::open(path){Ok(f)=>f,Err(e) if e.kind()==io::ErrorKind::NotFound=>return Ok(Self::default()),Err(e)=>return Err(e)};let mut l=Self::default();for line in BufReader::new(f).lines(){if let Some(e)=decode(&line?){l.events.push(e)}}Ok(l)}
 }
 fn esc(s:&str)->String{s.replace('\\',"\\\\").replace('\t',"\\t").replace('\n',"\\n").replace('\r',"\\r")}
