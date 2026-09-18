@@ -84,6 +84,8 @@ fn state_json(rt: &Runtime) -> String {
             Event::AgentHandoff { work_item_id, from_agent, to_agent } => format!("handoff: {work_item_id} / {from_agent} -> {to_agent}"),
             Event::ModelRouted { task_kind, provider, model } => format!("model routed: {task_kind} / {provider} / {model}"),
             Event::ModelFailed { task_kind, provider, model, reason } => format!("model failed: {task_kind} / {provider} / {model} / {reason}"),
+            Event::GoalMaterialized { goal_id, task_id } => format!("goal materialized: {goal_id} -> {task_id}"),
+            Event::GoalCompleted { goal_id, success } => format!("goal completed: {goal_id} / {success}"),
             Event::RevenueStageAdvanced { opportunity_id, stage } => format!("revenue: {opportunity_id} -> {stage}"),
             Event::RevenueRecorded { cents, memo } => format!("revenue: {cents}¢ / {memo}"),
             Event::ExpenseRecorded { cents, memo } => format!("expense: {cents}¢ / {memo}"),
