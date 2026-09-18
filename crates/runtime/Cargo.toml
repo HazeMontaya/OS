@@ -2,17 +2,17 @@
 name = "os-runtime"
 version = "0.1.0"
 edition = "2021"
-dependencies = {
-  os-economy = { path = "../economy" },
-  os-governance = { path = "../governance" },
-  os-survival = { path = "../survival" },
-  os-revenue = { path = "../revenue" },
-  os-evolution = { path = "../evolution" },
-  os-execution = { path = "../execution" },
-  os-events = { path = "../events" },
-  os-memory = { path = "../memory" },
-  os-planner = { path = "../planner" },
-  os-model = { path = "../model" },
-  os-commerce = { path = "../commerce" },
-  os-research = { path = "../research" },
-}
+
+[dependencies]
+os-economy = { path = "../economy" }
+os-governance = { path = "../governance" }
+os-survival = { path = "../survival" }
+os-revenue = { path = "../revenue" }
+os-evolution = { path = "../evolution" }
+os-execution = { path = "../execution" }
+os-events = { path = "../events" }
+os-memory = { path = "../memory" }
+os-planner = { path = "../planner" }
+os-model = { path = "../model" }
+os-commerce = { path = "../commerce" }
+os-research = { path = "../research" }
