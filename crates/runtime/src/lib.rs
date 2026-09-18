@@ -73,8 +73,13 @@ impl Runtime{
  }
  pub fn run_cycle(&mut self) -> CycleResult {
   let mode = self.snapshot().treasury.mode;
-  self.memory.remember("agent-01", "cycle", format!("autonomous cycle started in {:?}", mode));\n  if self.pending_tasks.is_empty() {\n      let plans=self.planner.plan(PlannerInput{treasury:self.snapshot().treasury.clone(),opportunities:&self.opportunities,queued_tasks:self.pending_tasks.len()});\n      for p in plans { self.queue_task(p.agent,p.class,p.estimated_cost_cents,p.tool,p.approval); self.memory.remember("agent-01","plan",p.reason); }\n  }
-  if let Some(result) = self.execute_next_queued_task() { return CycleResult { kind: "task".into(), agent: "scheduler".into(), summary: result.message.clone(), success: result.status == TaskStatus::Completed }; }\n  if let Some(index) = self.next_revenue_project() {
+  self.memory.remember("agent-01", "cycle", format!("autonomous cycle started in {:?}", mode));
+  if self.pending_tasks.is_empty() {
+      let plans=self.planner.plan(PlannerInput{treasury:self.snapshot().treasury.clone(),opportunities:&self.opportunities,queued_tasks:self.pending_tasks.len()});
+      for p in plans { self.queue_task(p.agent,p.class,p.estimated_cost_cents,p.tool,p.approval); self.memory.remember("agent-01","plan",p.reason); }
+  }
+  if let Some(result) = self.execute_next_queued_task() { return CycleResult { kind: "task".into(), agent: "scheduler".into(), summary: result.message.clone(), success: result.status == TaskStatus::Completed }; }
+  if let Some(index) = self.next_revenue_project() {
       let name = self.opportunities[index].opportunity.name.clone();
       if let Some(stage) = self.advance_best_revenue_project() {
           self.memory.remember("agent-03", "revenue", format!("{} -> {:?}", name, stage));
@@ -146,9 +151,11 @@ impl Runtime{
  pub fn record_expense(&mut self,cents:i64,memo:impl Into<String>)->Result<(),&'static str>{let memo=memo.into();let r=self.treasury.record_expense(cents,memo.clone());if r.is_ok(){self.events.push(Event::ExpenseRecorded{cents,memo});}r}
 }
 
-fn esc(s:&str)->String{s.replace('\\',"\\\\").replace('\t',"\\t").replace('\n',"
+fn esc(s:&str)->String{s.replace('\\',"\\\\").replace('\t',"\\t").replace('
+',"
 ").replace('\r',"\\r")}
-fn unesc(s:&str)->String{let mut o=String::new();let mut c=s.chars();while let Some(x)=c.next(){if x=='\\'{match c.next(){Some('t')=>o.push('\t'),Some('n')=>o.push('\n'),Some('r')=>o.push('\r'),Some('\\')=>o.push('\\'),Some(y)=>{o.push('\\');o.push(y)},None=>o.push('\\')}}else{o.push(x)}}o}
+fn unesc(s:&str)->String{let mut o=String::new();let mut c=s.chars();while let Some(x)=c.next(){if x=='\\'{match c.next(){Some('t')=>o.push('\t'),Some('n')=>o.push('
+'),Some('r')=>o.push('\r'),Some('\\')=>o.push('\\'),Some(y)=>{o.push('\\');o.push(y)},None=>o.push('\\')}}else{o.push(x)}}o}
 fn parse_stage(s:&str)->Option<os_revenue::RevenueStage>{match s{"Discovered"=>Some(os_revenue::RevenueStage::Discovered),"Validating"=>Some(os_revenue::RevenueStage::Validating),"Building"=>Some(os_revenue::RevenueStage::Building),"Selling"=>Some(os_revenue::RevenueStage::Selling),"Delivering"=>Some(os_revenue::RevenueStage::Delivering),"Measuring"=>Some(os_revenue::RevenueStage::Measuring),"Stopped"=>Some(os_revenue::RevenueStage::Stopped),_=>None}}
 
 #[cfg(test)]mod tests{
