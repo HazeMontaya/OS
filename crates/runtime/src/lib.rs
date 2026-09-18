@@ -3,7 +3,7 @@ use os_memory::Memory;
 use os_events::{Event,EventLog};
 use os_evolution::ChangeProposal;
 use os_execution::{AgentTask,ExecutionContext,ExecutionEngine,ExecutionResult,TaskStatus,ToolRequest};
-use os_governance::DecisionClass;
+use os_governance::{Decision, DecisionClass};
 use os_revenue::{Opportunity,RevenueProject};
 use os_survival::SurvivalDecision;
 use os_planner::{Planner,PlannerInput,RulePlanner};
