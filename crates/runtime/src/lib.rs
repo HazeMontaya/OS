@@ -8,28 +8,30 @@ use os_revenue::{Opportunity,RevenueProject};
 use os_survival::SurvivalDecision;
 use os_planner::{Planner,PlannerInput,RulePlanner};
 use os_model::EnvModelConfig;
+use os_commerce::Commerce;
+use os_research::ResearchPolicy;
 use std::path::PathBuf;
 use std::sync::atomic::{AtomicBool,Ordering};
 use std::time::Duration;
 
 #[derive(Clone,Debug)] pub struct Agent{pub id:String,pub role:String}
 #[derive(Clone,Debug)] pub struct CycleResult{pub kind:String,pub agent:String,pub summary:String,pub success:bool}
-#[derive(Clone,Debug)] pub struct RuntimeSnapshot{pub agents:Vec<Agent>,pub treasury:TreasurySnapshot,pub survival:SurvivalDecision,pub opportunities:usize,pub changes:usize,pub events:usize,pub queued_tasks:usize}
+#[derive(Clone,Debug)] pub struct RuntimeSnapshot{pub agents:Vec<Agent>,pub treasury:TreasurySnapshot,pub survival:SurvivalDecision,pub opportunities:usize,pub changes:usize,pub events:usize,pub queued_tasks:usize,pub customers:usize,pub outstanding_invoices_cents:i64}
 #[derive(Clone,Debug)] pub struct QueuedTask{pub agent:String,pub class:DecisionClass,pub cost:i64,pub tool:ToolRequest,pub approval:bool}
 pub struct Runtime{
  pub agents:Vec<Agent>,pub treasury:Treasury,pub opportunities:Vec<RevenueProject>,pub changes:Vec<ChangeProposal>,
- pub execution:ExecutionEngine,pub model:EnvModelConfig,pub planner:RulePlanner,pub pending_tasks:Vec<QueuedTask>,pub events:EventLog,pub memory:Memory,pub context:ExecutionContext,thresholds:SurvivalThresholds,next_task:u64
+ pub execution:ExecutionEngine,pub model:EnvModelConfig,pub planner:RulePlanner,pub commerce:Commerce,pub research_policy:ResearchPolicy,pub pending_tasks:Vec<QueuedTask>,pub events:EventLog,pub memory:Memory,pub context:ExecutionContext,thresholds:SurvivalThresholds,next_task:u64
 }
 impl Runtime{
  pub fn new(initial_balance_cents:i64)->Self{
   let roles=["Governor","Research","Business","Engineering","Content","Finance","Operations","QA","Security"];
   let agents=roles.iter().enumerate().map(|(i,r)|Agent{id:format!("agent-{:02}",i+1),role:(*r).into()}).collect();
   let mut treasury=Treasury::new(initial_balance_cents);treasury.set_burn_rate(100);
-  Self{agents,treasury,opportunities:vec![],changes:vec![],execution:ExecutionEngine::default(),model:EnvModelConfig::from_env(),planner:RulePlanner::default(),pending_tasks:vec![],events:EventLog::default(),memory:Memory::default(),
+  Self{agents,treasury,opportunities:vec![],changes:vec![],execution:ExecutionEngine::default(),model:EnvModelConfig::from_env(),planner:RulePlanner::default(),commerce:Commerce::default(),research_policy:ResearchPolicy::default(),pending_tasks:vec![],events:EventLog::default(),memory:Memory::default(),
    context:ExecutionContext{workspace_root:PathBuf::from("."),allowed_commands:vec!["cargo".into(),"rustc".into(),"git".into()],command_timeout:Duration::from_secs(30),max_output_bytes:64*1024},
    thresholds:SurvivalThresholds{explore_days:30,operate_days:14,optimize_days:7,emergency_days:2},next_task:1}
  }
- pub fn snapshot(&self)->RuntimeSnapshot{let t=self.treasury.snapshot(self.thresholds);RuntimeSnapshot{agents:self.agents.clone(),survival:os_survival::replan(t.mode),treasury:t,opportunities:self.opportunities.len(),changes:self.changes.len(),events:self.events.len(),queued_tasks:self.pending_tasks.len()}}
+ pub fn snapshot(&self)->RuntimeSnapshot{let t=self.treasury.snapshot(self.thresholds);RuntimeSnapshot{agents:self.agents.clone(),survival:os_survival::replan(t.mode),treasury:t,opportunities:self.opportunities.len(),changes:self.changes.len(),events:self.events.len(),queued_tasks:self.pending_tasks.len(),customers:self.commerce.customers.len(),outstanding_invoices_cents:self.commerce.outstanding_cents()}}
  pub fn queue_task(&mut self,agent:impl Into<String>,class:DecisionClass,cost:i64,tool:ToolRequest,approval:bool){self.pending_tasks.push(QueuedTask{agent:agent.into(),class,cost:cost.max(0),tool,approval});}
  pub fn execute_next_queued_task(&mut self)->Option<ExecutionResult>{
      let task=self.pending_tasks.first()?.clone();
