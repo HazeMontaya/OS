@@ -200,6 +200,29 @@ impl OpenAiCompatibleProvider {
     }
 }
 
+impl OpenAiCompatibleProvider {
+    pub fn discover_models(&self) -> Result<Vec<String>, ModelError> {
+        let models_endpoint = if self.endpoint.ends_with("/chat/completions") {
+            self.endpoint.trim_end_matches("/chat/completions").to_string() + "/models"
+        } else if self.endpoint.ends_with("/v1") {
+            format!("{}/models", self.endpoint)
+        } else {
+            format!("{}/models", self.endpoint.trim_end_matches('/'))
+        };
+        let response = reqwest::blocking::Client::new()
+            .get(models_endpoint)
+            .bearer_auth(&self.api_key)
+            .send()
+            .map_err(|e| ModelError::Unavailable(e.to_string()))?;
+        let status=response.status();
+        let value:serde_json::Value=response.json().map_err(|e|ModelError::InvalidResponse(e.to_string()))?;
+        if !status.is_success() { return Err(ModelError::InvalidResponse(value.to_string())); }
+        let models=value.get("data").and_then(|v|v.as_array())
+            .ok_or_else(||ModelError::InvalidResponse("model catalog contained no data array".into()))?;
+        Ok(models.iter().filter_map(|item|item.get("id").and_then(|v|v.as_str()).map(str::to_owned)).collect())
+    }
+}
+
 impl ModelProvider for OpenAiCompatibleProvider {
     fn complete(&self, request: &ModelRequest) -> Result<ModelResponse, ModelError> {
         let body = serde_json::json!({
