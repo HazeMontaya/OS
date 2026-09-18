@@ -98,6 +98,12 @@ pub struct RoutingDecision {
     pub reason: String,
 }
 
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct RoutingPlan {
+    pub primary: RoutingDecision,
+    pub fallbacks: Vec<RoutingDecision>,
+}
+
 #[derive(Clone, Debug, Default)]
 pub struct ModelRouter {
     candidates: Vec<ModelCandidate>,
@@ -224,6 +230,27 @@ impl ModelRouter {
         let c=available.first().ok_or_else(||ModelError::Unavailable("no healthy model satisfies routing constraints".into()))?;
         Ok(RoutingDecision { provider:c.provider.clone(), model:c.model.clone(), reason:format!("task={kind}; capability match first, then cost/latency") })
     }
+    pub fn route_plan_for_task(&self, kind: &str, min_quota_tokens: usize, max_latency_ms: Option<u32>) -> Result<RoutingPlan, ModelError> {
+        let mut available: Vec<&ModelCandidate> = self.candidates.iter()
+            .filter(|c| c.healthy && c.remaining_quota_tokens >= min_quota_tokens)
+            .filter(|c| max_latency_ms.map(|limit| c.latency_ms <= limit).unwrap_or(true))
+            .collect();
+        available.sort_by_key(|c| (
+            if c.capabilities.iter().any(|cap| cap.eq_ignore_ascii_case(kind)) { 0u8 } else { 1u8 },
+            c.estimated_cost_micros,
+            c.latency_ms,
+            &c.provider,
+            &c.model,
+        ));
+        if available.is_empty() { return Err(ModelError::Unavailable("no healthy model satisfies routing constraints".into())); }
+        let decisions:Vec<RoutingDecision>=available.into_iter().map(|c|RoutingDecision{
+            provider:c.provider.clone(),model:c.model.clone(),reason:format!("task={kind}; capability/cost/latency ranking")
+        }).collect();
+        let mut it=decisions.into_iter();
+        let primary=it.next().expect("available is non-empty");
+        Ok(RoutingPlan { primary, fallbacks:it.collect() })
+    }
+
 }
 
 #[cfg(test)]
