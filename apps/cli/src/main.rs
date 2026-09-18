@@ -6,7 +6,7 @@ use std::thread;
 use std::time::Duration;
 
 fn main() {
-    let mut runtime = Runtime::new(100_000);
+    let initial_balance = std::env::var("OS_INITIAL_BALANCE_CENTS").ok().and_then(|v| v.parse::<i64>().ok()).unwrap_or(100_000);\n    let mut runtime = Runtime::new(initial_balance);
     let state = std::path::PathBuf::from(".os/state.tsv");
     let events = std::path::PathBuf::from(".os/events.log");
     let memory = std::path::PathBuf::from(".os/memory.log");
@@ -66,8 +66,8 @@ fn main() {
         cycles += 1;
         if let Err(e) = runtime.checkpoint(&state, &events, &memory) { eprintln!("checkpoint warning: {e}"); }
         let mut waited = Duration::ZERO;
-        while waited < Duration::from_secs(2) && !stop.load(Ordering::Relaxed) {
-            let slice = (Duration::from_secs(2) - waited).min(Duration::from_millis(250));
+        let heartbeat_seconds = std::env::var("OS_HEARTBEAT_SECONDS").ok().and_then(|v| v.parse::<u64>().ok()).unwrap_or(2).max(1);\n        while waited < Duration::from_secs(heartbeat_seconds) && !stop.load(Ordering::Relaxed) {
+            let slice = (Duration::from_secs(heartbeat_seconds) - waited).min(Duration::from_millis(250));
             thread::sleep(slice);
             waited += slice;
         }
