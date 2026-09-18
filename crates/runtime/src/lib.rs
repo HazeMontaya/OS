@@ -138,7 +138,7 @@ impl Runtime{
  pub fn record_expense(&mut self,cents:i64,memo:impl Into<String>)->Result<(),&'static str>{let memo=memo.into();let r=self.treasury.record_expense(cents,memo.clone());if r.is_ok(){self.events.push(Event::ExpenseRecorded{cents,memo});}r}
 }
 
-fn esc(s:&str)->String{s.replace('\\',"\\\\").replace('\t',"\t").replace('\n',"\\n").replace('\r',"\\r")}
+fn esc(s:&str)->String{s.replace('\\',"\\\\").replace('\t',"\\t").replace('\n',"\\n").replace('\r',"\\r")}
 fn unesc(s:&str)->String{let mut o=String::new();let mut c=s.chars();while let Some(x)=c.next(){if x=='\\'{match c.next(){Some('t')=>o.push('\t'),Some('n')=>o.push('\n'),Some('r')=>o.push('\r'),Some('\\')=>o.push('\\'),Some(y)=>{o.push('\\');o.push(y)},None=>o.push('\\')}}else{o.push(x)}}o}
 fn parse_stage(s:&str)->Option<os_revenue::RevenueStage>{match s{"Discovered"=>Some(os_revenue::RevenueStage::Discovered),"Validating"=>Some(os_revenue::RevenueStage::Validating),"Building"=>Some(os_revenue::RevenueStage::Building),"Selling"=>Some(os_revenue::RevenueStage::Selling),"Delivering"=>Some(os_revenue::RevenueStage::Delivering),"Measuring"=>Some(os_revenue::RevenueStage::Measuring),"Stopped"=>Some(os_revenue::RevenueStage::Stopped),_=>None}}
 
