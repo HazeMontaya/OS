@@ -56,12 +56,23 @@ impl Runtime{
  pub fn next_ready_goals(&self)->Vec<&Goal>{ self.goals.ready() }
  pub fn set_goal_status(&mut self,id:&str,status:GoalStatus)->Result<(),String>{ self.goals.set_status(id,status) }
  pub fn route_model(&self, task_kind:&str, min_quota_tokens:usize, max_latency_ms:Option<u32>) -> Result<RoutingDecision,ModelError> { self.model_router.route_for_task(task_kind,min_quota_tokens,max_latency_ms) }
- pub fn complete_model(&self, task_kind:&str, request:&ModelRequest) -> Result<ModelResponse,ModelError> {
-  let route=self.route_model(task_kind,request.max_tokens,None)?;
-  match route.provider.to_ascii_lowercase().as_str(){
-   "omniroute"|"openai"|"openai-compatible" => { let mut config=self.model.clone(); config.provider=route.provider; config.model=route.model; let provider=os_model::OpenAiCompatibleProvider::from_env(&config)?; provider.complete(request) }
-   other => Err(ModelError::Unavailable(format!("no runtime adapter for selected provider: {other}"))),
+ pub fn complete_model(&mut self, task_kind:&str, request:&ModelRequest) -> Result<ModelResponse,ModelError> {
+  let plan=self.model_router.route_plan_for_task(task_kind,request.max_tokens,None)?;
+  let candidates=std::iter::once(plan.primary).chain(plan.fallbacks);
+  let mut last_error=None;
+  for route in candidates {
+   match route.provider.to_ascii_lowercase().as_str(){
+    "omniroute"|"openai"|"openai-compatible" => {
+      let mut config=self.model.clone(); config.provider=route.provider.clone(); config.model=route.model.clone();
+      match os_model::OpenAiCompatibleProvider::from_env(&config).and_then(|provider|provider.complete(request)) {
+       Ok(response)=>{self.model_router.mark_healthy(&route.provider,&route.model);self.events.push(Event::ModelRouted{task_kind:task_kind.into(),provider:route.provider,model:route.model});return Ok(response)},
+       Err(error)=>{self.model_router.mark_unhealthy(&route.provider,&route.model);self.events.push(Event::ModelFailed{task_kind:task_kind.into(),provider:route.provider.clone(),model:route.model.clone(),reason:format!("{error:?}")});last_error=Some(error)}
+      }
+    },
+    other=>{let error=ModelError::Unavailable(format!("no runtime adapter for selected provider: {other}"));self.model_router.mark_unhealthy(&route.provider,&route.model);self.events.push(Event::ModelFailed{task_kind:task_kind.into(),provider:route.provider.clone(),model:route.model.clone(),reason:format!("{error:?}")});last_error=Some(error)}
+   }
   }
+  Err(last_error.unwrap_or_else(||ModelError::Unavailable("all model candidates failed".into())))
  }
  pub fn queue_task(&mut self,agent:impl Into<String>,class:DecisionClass,cost:i64,tool:ToolRequest,approval:bool){self.pending_tasks.push(QueuedTask{agent:agent.into(),class,cost:cost.max(0),tool,approval});}
  pub fn execute_next_queued_task(&mut self)->Option<ExecutionResult>{
