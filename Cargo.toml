@@ -7,6 +7,7 @@ members = [
   "crates/revenue",
   "crates/evolution",
   "crates/execution",
+  "crates/events",
   "crates/runtime",
   "apps/cli",
 ]
