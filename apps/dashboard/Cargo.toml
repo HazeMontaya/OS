@@ -1,0 +1,8 @@
+[package]
+name = "os-dashboard"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+os-runtime = { path = "../../crates/runtime" }
+os-revenue = { path = "../../crates/revenue" }
