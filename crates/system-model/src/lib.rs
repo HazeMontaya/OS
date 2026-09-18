@@ -1,6 +1,6 @@
 use std::collections::BTreeMap;
 
-#[derive(Clone, Copy, Debug, Eq, PartialEq, Ord, PartialOrd)]
+#[derive(Clone, Copy, Debug, Eq, PartialEq, Ord, PartialOrd, serde::Serialize, serde::Deserialize)]
 pub enum EntityKind {
     Workspace,
     Project,
@@ -15,7 +15,7 @@ pub enum EntityKind {
     Unknown,
 }
 
-#[derive(Clone, Copy, Debug, Eq, PartialEq, Ord, PartialOrd)]
+#[derive(Clone, Copy, Debug, Eq, PartialEq, Ord, PartialOrd, serde::Serialize, serde::Deserialize)]
 pub enum VerificationStatus {
     Unverified,
     Observed,
@@ -23,7 +23,7 @@ pub enum VerificationStatus {
     Stale,
 }
 
-#[derive(Clone, Debug, Eq, PartialEq)]
+#[derive(Clone, Debug, Eq, PartialEq, serde::Serialize, serde::Deserialize)]
 pub struct Evidence {
     pub id: String,
     pub source: String,
@@ -33,7 +33,7 @@ pub struct Evidence {
     pub excerpt: String,
 }
 
-#[derive(Clone, Debug, Eq, PartialEq)]
+#[derive(Clone, Debug, Eq, PartialEq, serde::Serialize, serde::Deserialize)]
 pub struct SystemEntity {
     pub id: String,
     pub kind: EntityKind,
@@ -42,7 +42,7 @@ pub struct SystemEntity {
     pub evidence_ids: Vec<String>,
 }
 
-#[derive(Clone, Debug, Eq, PartialEq)]
+#[derive(Clone, Debug, Eq, PartialEq, serde::Serialize, serde::Deserialize)]
 pub struct SystemRelation {
     pub from: String,
     pub relation: String,
@@ -50,7 +50,7 @@ pub struct SystemRelation {
     pub evidence_ids: Vec<String>,
 }
 
-#[derive(Clone, Debug, Default)]
+#[derive(Clone, Debug, Default, serde::Serialize, serde::Deserialize)]
 pub struct SystemModel {
     pub entities: BTreeMap<String, SystemEntity>,
     pub relations: Vec<SystemRelation>,
@@ -139,6 +139,28 @@ impl SystemModel {
         Ok(())
     }
 
+    pub fn save_json(&self, path: impl AsRef<std::path::Path>) -> std::io::Result<()> {
+        let path=path.as_ref();
+        if let Some(parent)=path.parent() { std::fs::create_dir_all(parent)?; }
+        let tmp=path.with_extension("tmp");
+        let data=serde_json::to_vec_pretty(self).map_err(|e|std::io::Error::new(std::io::ErrorKind::InvalidData,e.to_string()))?;
+        std::fs::write(&tmp,data)?;
+        let file=std::fs::OpenOptions::new().read(true).open(&tmp)?;
+        file.sync_all()?;
+        std::fs::rename(tmp,path)?;
+        Ok(())
+    }
+
+    pub fn load_json(path: impl AsRef<std::path::Path>) -> std::io::Result<Self> {
+        let path=path.as_ref();
+        let data=match std::fs::read(path) {
+            Ok(data)=>data,
+            Err(error) if error.kind()==std::io::ErrorKind::NotFound=>return Ok(Self::default()),
+            Err(error)=>return Err(error),
+        };
+        serde_json::from_slice(&data).map_err(|e|std::io::Error::new(std::io::ErrorKind::InvalidData,e.to_string()))
+    }
+
     pub fn explain(&self, entity_id: &str) -> Option<SystemExplanation> {
         let entity = self.entities.get(entity_id)?;
         let relations = self.relations.iter().filter(|r| r.from == entity_id || r.to == entity_id).cloned().collect();
@@ -176,6 +198,17 @@ mod tests {
         let x = m.explain("agent-01").unwrap();
         assert_eq!(x.evidence.len(), 0);
         assert_eq!(x.relations[0].evidence_ids, vec!["e1"]);
+    }
+
+    #[test]
+    fn persistence_roundtrip() {
+        let path=std::env::temp_dir().join(format!("haze-system-{}.json",std::process::id()));
+        let mut m=SystemModel::default();
+        m.upsert_entity("a",EntityKind::Agent,"A").unwrap();
+        m.save_json(&path).unwrap();
+        let loaded=SystemModel::load_json(&path).unwrap();
+        assert_eq!(loaded.entities.get("a").unwrap().label,"A");
+        let _=std::fs::remove_file(path);
     }
 
     #[test]
