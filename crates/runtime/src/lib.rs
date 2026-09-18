@@ -11,18 +11,19 @@ use os_model::EnvModelConfig;
 use os_commerce::Commerce;
 use os_research::ResearchPolicy;
 use os_orchestration::{AgentWorkspace, DecisionRecord, NodeKind, WorkGraph, WorkItem, WorkspaceRegistry, WorkspaceStatus};
-use os_model::{ModelCandidate, ModelError, ModelRouter};
+use os_model::{ModelCandidate, ModelRouter, RoutingDecision, ModelError};
+use os_system_model::{EntityKind, Evidence, SystemModel, VerificationStatus};
 use std::path::PathBuf;
 use std::sync::atomic::{AtomicBool,Ordering};
 use std::time::Duration;
 
 #[derive(Clone,Debug)] pub struct Agent{pub id:String,pub role:String}
 #[derive(Clone,Debug)] pub struct CycleResult{pub kind:String,pub agent:String,pub summary:String,pub success:bool}
-#[derive(Clone,Debug)] pub struct RuntimeSnapshot{pub agents:Vec<Agent>,pub treasury:TreasurySnapshot,pub survival:SurvivalDecision,pub opportunities:usize,pub changes:usize,pub events:usize,pub queued_tasks:usize,pub customers:usize,pub outstanding_invoices_cents:i64,pub work_items:usize,pub workspaces:usize,pub decisions:usize,pub model_candidates:usize}
+#[derive(Clone,Debug)] pub struct RuntimeSnapshot{pub agents:Vec<Agent>,pub treasury:TreasurySnapshot,pub survival:SurvivalDecision,pub opportunities:usize,pub changes:usize,pub events:usize,pub queued_tasks:usize,pub customers:usize,pub outstanding_invoices_cents:i64,pub work_items:usize,pub workspaces:usize,pub decisions:usize,pub model_candidates:usize,pub system_entities:usize,pub system_relations:usize,pub system_evidence:usize}
 #[derive(Clone,Debug)] pub struct QueuedTask{pub agent:String,pub class:DecisionClass,pub cost:i64,pub tool:ToolRequest,pub approval:bool}
 pub struct Runtime{
  pub agents:Vec<Agent>,pub treasury:Treasury,pub opportunities:Vec<RevenueProject>,pub changes:Vec<ChangeProposal>,
- pub execution:ExecutionEngine,pub model:EnvModelConfig,pub model_router:ModelRouter,pub planner:RulePlanner,pub commerce:Commerce,pub research_policy:ResearchPolicy,pub pending_tasks:Vec<QueuedTask>,pub events:EventLog,pub memory:Memory,pub context:ExecutionContext,pub work_graph:WorkGraph,pub work_items:Vec<WorkItem>,pub workspaces:WorkspaceRegistry,pub decisions:Vec<DecisionRecord>,thresholds:SurvivalThresholds,next_task:u64
+ pub execution:ExecutionEngine,pub model:EnvModelConfig,pub model_router:ModelRouter,pub planner:RulePlanner,pub commerce:Commerce,pub research_policy:ResearchPolicy,pub pending_tasks:Vec<QueuedTask>,pub events:EventLog,pub memory:Memory,pub context:ExecutionContext,pub work_graph:WorkGraph,pub work_items:Vec<WorkItem>,pub workspaces:WorkspaceRegistry,pub decisions:Vec<DecisionRecord>,pub system_model:SystemModel,thresholds:SurvivalThresholds,next_task:u64
 }
 impl Runtime{
  pub fn new(initial_balance_cents:i64)->Self{
@@ -37,9 +38,10 @@ impl Runtime{
   for agent in &agents { workspaces.ensure(&agent.id, format!("workspaces/{}", agent.id)); }
   Self{agents,treasury,opportunities:vec![],changes:vec![],execution:ExecutionEngine::default(),model,model_router,planner:RulePlanner::default(),commerce:Commerce::default(),research_policy:ResearchPolicy::default(),pending_tasks:vec![],events:EventLog::default(),memory:Memory::default(),
    context:ExecutionContext{workspace_root:PathBuf::from("."),allowed_commands:vec!["cargo".into(),"rustc".into(),"git".into()],command_timeout:Duration::from_secs(30),max_output_bytes:64*1024},
-   work_graph,work_items:vec![],workspaces,decisions:vec![],thresholds:SurvivalThresholds{explore_days:30,operate_days:14,optimize_days:7,emergency_days:2},next_task:1}
+   work_graph,work_items:vec![],workspaces,decisions:vec![],system_model,thresholds:SurvivalThresholds{explore_days:30,operate_days:14,optimize_days:7,emergency_days:2},next_task:1}
  }
- pub fn snapshot(&self)->RuntimeSnapshot{let t=self.treasury.snapshot(self.thresholds);RuntimeSnapshot{agents:self.agents.clone(),survival:os_survival::replan(t.mode),treasury:t,opportunities:self.opportunities.len(),changes:self.changes.len(),events:self.events.len(),queued_tasks:self.pending_tasks.len(),customers:self.commerce.customers.len(),outstanding_invoices_cents:self.commerce.outstanding_cents(),work_items:self.work_items.len(),workspaces:self.workspaces.all().count(),decisions:self.decisions.len(),model_candidates:self.model_router.candidates().len()}}
+ pub fn snapshot(&self)->RuntimeSnapshot{let t=self.treasury.snapshot(self.thresholds);RuntimeSnapshot{agents:self.agents.clone(),survival:os_survival::replan(t.mode),treasury:t,opportunities:self.opportunities.len(),changes:self.changes.len(),events:self.events.len(),queued_tasks:self.pending_tasks.len(),customers:self.commerce.customers.len(),outstanding_invoices_cents:self.commerce.outstanding_cents(),work_items:self.work_items.len(),workspaces:self.workspaces.all().count(),decisions:self.decisions.len(),model_candidates:self.model_router.candidates().len(),system_entities:self.system_model.entities.len(),system_relations:self.system_model.relations.len(),system_evidence:self.system_model.evidence.len()}}
+ pub fn route_model(&self, task_kind:&str, min_quota_tokens:usize, max_latency_ms:Option<u32>) -> Result<RoutingDecision,ModelError> { self.model_router.route_for_task(task_kind,min_quota_tokens,max_latency_ms) }
  pub fn queue_task(&mut self,agent:impl Into<String>,class:DecisionClass,cost:i64,tool:ToolRequest,approval:bool){self.pending_tasks.push(QueuedTask{agent:agent.into(),class,cost:cost.max(0),tool,approval});}
  pub fn execute_next_queued_task(&mut self)->Option<ExecutionResult>{
      let task=self.pending_tasks.first()?.clone();
@@ -249,3 +251,43 @@ fn parse_stage(s:&str)->Option<os_revenue::RevenueStage>{match s{"Discovered"=>S
 }
 }
 \nfn default_work_graph(agents:&[Agent])->WorkGraph {\n    let mut g=WorkGraph::default();\n    for agent in agents { let _=g.add_node(os_orchestration::WorkNode{id:agent.id.clone(),label:agent.role.clone(),agent_id:Some(agent.id.clone()),kind:NodeKind::Agent,class:DecisionClass::ReadOnly}); }\n    let edges=[("agent-01","agent-02"),("agent-01","agent-09"),("agent-02","agent-03"),("agent-02","agent-04"),("agent-09","agent-08"),("agent-04","agent-08"),("agent-03","agent-05"),("agent-05","agent-06"),("agent-06","agent-07")];\n    for (from,to) in edges { let _=g.connect(from,to,8); }\n    g\n}\n\n
+
+fn bootstrap_system_model(agents:&[Agent]) -> SystemModel {
+    let mut model=SystemModel::default();
+    let _=model.upsert_entity("james-core",EntityKind::Service,"JAMES Runtime");
+    let _=model.upsert_entity("workspace-root",EntityKind::Workspace,"Agent Workspace Root");
+    for agent in agents {
+        let _=model.upsert_entity(&agent.id,EntityKind::Agent,&agent.role);
+        let _=model.link("james-core","controls",&agent.id);
+    }
+    let evidence=Evidence{
+        id:"runtime-bootstrap".into(),
+        source:"runtime".into(),
+        producer:"os-runtime".into(),
+        observed_at_ms:now_ms(),
+        verification:VerificationStatus::Verified,
+        excerpt:"agent registry and runtime ownership initialized at boot".into(),
+    };
+    let _=model.add_evidence(evidence);
+    for agent in agents {
+        let _=model.attach_entity_evidence(&agent.id,"runtime-bootstrap");
+    }
+    let _=model.add_evidence(Evidence{
+        id:"workspace-bootstrap".into(),
+        source:"workspace-registry".into(),
+        producer:"os-runtime".into(),
+        observed_at_ms:now_ms(),
+        verification:VerificationStatus::Observed,
+        excerpt:"per-agent workspace records created".into(),
+    });
+    for agent in agents {
+        let _=model.link(&agent.id,"owns_workspace","workspace-root");
+        let _=model.attach_relation_evidence(&agent.id,"owns_workspace","workspace-root","workspace-bootstrap");
+    }
+    model
+}
+
+fn now_ms() -> u128 {
+    std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).map(|d|d.as_millis()).unwrap_or(0)
+}
+
