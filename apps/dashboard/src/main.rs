@@ -42,12 +42,17 @@ fn state_json(rt: &Runtime) -> String {
         format!("\"{}\"", json_escape(&line))
     }).collect::<Vec<_>>().join(",");
     format!(
-        "{{\"treasury\":{{\"balance_cents\":{},\"reserved_cents\":{},\"revenue_cents\":{},\"expense_cents\":{},\"burn_rate_cents_per_day\":{},\"runway_days\":{},\"mode\":\"{:?}\"}},\"survival\":{{\"allow_experiments\":{},\"allow_new_workers\":{},\"allow_nonessential_compute\":{},\"max_experiment_cents\":{}}},\"opportunities\":{},\"changes\":{},\"events\":{},\"agents\":[{}],\"events_recent\":[{}]}}",
+        "{{\"treasury\":{{\"balance_cents\":{},\"reserved_cents\":{},\"revenue_cents\":{},\"expense_cents\":{},\"burn_rate_cents_per_day\":{},\"runway_days\":{},\"mode\":\"{:?}\"}},\"survival\":{{\"allow_experiments\":{},\"allow_new_workers\":{},\"allow_nonessential_compute\":{},\"max_experiment_cents\":{}}},\"opportunities\":{},\"changes\":{},\"events\":{},\"goals\":{},\"ready_goals\":{},\"active_goals\":{},\"completed_goals\":{},\"agents\":[{}],\"events_recent\":[{}]}}",
         s.treasury.balance_cents, s.treasury.reserved_cents, s.treasury.revenue_cents, s.treasury.expense_cents,
         s.treasury.burn_rate_cents_per_day, runway, s.treasury.mode,
         s.survival.allow_experiments, s.survival.allow_new_workers, s.survival.allow_nonessential_compute,
-        s.survival.max_experiment_cents, s.opportunities, s.changes, s.events, agents_json(rt), events
+        s.survival.max_experiment_cents, s.opportunities, s.changes, s.events, s.goals, s.ready_goals, s.active_goals, s.completed_goals, agents_json(rt), events
     )
+}
+
+
+fn goals_json(rt:&Runtime)->String{
+    rt.goals.goals.values().map(|g|format!("{{\"id\":\"{}\",\"title\":\"{}\",\"kind\":\"{:?}\",\"status\":\"{:?}\",\"action\":{},\"owner_agent\":{}}}",json_escape(&g.id),json_escape(&g.title),g.kind,g.status,g.action.map(|a|format!("\"{:?}\"",a)).unwrap_or_else(||"null".into()),g.owner_agent.as_ref().map(|a|format!("\"{}\"",json_escape(a))).unwrap_or_else(||"null".into()))).collect::<Vec<_>>().join(",")
 }
 
 fn workflow_json(rt: &Runtime) -> String {
@@ -102,6 +107,7 @@ fn handle(mut stream: TcpStream, rt: &mut Runtime, index: &str) {
         ("GET", "/api/workflow") => response(&mut stream, "200 OK", "application/json", &workflow_json(rt)),
         ("GET", "/api/models") => response(&mut stream, "200 OK", "application/json", &models_json(rt)),
         ("GET", "/api/system") => response(&mut stream, "200 OK", "application/json", &system_json(rt)),
+        ("GET", "/api/goals") => response(&mut stream, "200 OK", "application/json", &format!("[{}]", goals_json(rt))),
         ("GET", "/api/health") => response(&mut stream, "200 OK", "application/json", "{\"ok\":true}"),
         ("POST", "/api/tick") => {
             let cycle = rt.run_cycle();
