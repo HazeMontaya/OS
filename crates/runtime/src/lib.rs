@@ -75,10 +75,6 @@ impl Runtime{
  pub fn run_cycle(&mut self) -> CycleResult {
   let mode = self.snapshot().treasury.mode;
   self.memory.remember("agent-01", "cycle", format!("autonomous cycle started in {:?}", mode));
-  if self.pending_tasks.is_empty() {
-      let plans=self.planner.plan(PlannerInput{treasury:self.snapshot().treasury.clone(),opportunities:&self.opportunities,queued_tasks:self.pending_tasks.len()});
-      for p in plans { self.queue_task(p.agent,p.class,p.estimated_cost_cents,p.tool,p.approval); self.memory.remember("agent-01","plan",p.reason); }
-  }
   if let Some(result) = self.execute_next_queued_task() { return CycleResult { kind: "task".into(), agent: "scheduler".into(), summary: result.message.clone(), success: result.status == TaskStatus::Completed }; }
   if let Some(index) = self.next_revenue_project() {
       let name = self.opportunities[index].opportunity.name.clone();
@@ -94,6 +90,11 @@ impl Runtime{
       ToolRequest::RunCommand { program: "rustc".into(), args: vec!["--version".into()] },
       false,
   );
+  if self.pending_tasks.is_empty() {
+      let plans=self.planner.plan(PlannerInput{treasury:self.snapshot().treasury.clone(),opportunities:&self.opportunities,queued_tasks:self.pending_tasks.len()});
+      for p in plans { self.queue_task(p.agent,p.class,p.estimated_cost_cents,p.tool,p.approval); self.memory.remember("agent-01","plan",p.reason); }
+  }
+  if let Some(result) = self.execute_next_queued_task() { return CycleResult { kind: "task".into(), agent: "scheduler".into(), summary: result.message.clone(), success: result.status == TaskStatus::Completed }; }
   CycleResult {
       kind: "maintenance".into(),
       agent: "agent-02".into(),
