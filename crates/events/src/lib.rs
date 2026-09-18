@@ -236,6 +236,8 @@ fn decode(line: &str) -> Option<Event> {
         "AgentHandoff" => Event::AgentHandoff { work_item_id: value(parts.next())?, from_agent: value(parts.next())?, to_agent: value(parts.next())? },
         "ModelRouted" => Event::ModelRouted { task_kind: value(parts.next())?, provider: value(parts.next())?, model: value(parts.next())? },
         "ModelFailed" => Event::ModelFailed { task_kind: value(parts.next())?, provider: value(parts.next())?, model: value(parts.next())?, reason: value(parts.next())? },
+        "ModelRouted" => Event::ModelRouted { task_kind: value(parts.next())?, provider: value(parts.next())?, model: value(parts.next())? },
+        "ModelFailed" => Event::ModelFailed { task_kind: value(parts.next())?, provider: value(parts.next())?, model: value(parts.next())?, reason: value(parts.next())? },
         "RevenueStageAdvanced" => Event::RevenueStageAdvanced {
             opportunity_id: value(parts.next())?,
             stage: value(parts.next())?,
