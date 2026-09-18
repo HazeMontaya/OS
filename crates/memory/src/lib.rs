@@ -33,7 +33,7 @@ impl Memory {
     pub fn append_jsonl(&self, path: impl AsRef<Path>) -> io::Result<()> {
         let mut file = OpenOptions::new().create(true).append(true).open(path)?;
         for e in self.entries.iter().rev().take(1) {
-            writeln!(file, "{{"timestamp":{},"agent":"{}","kind":"{}","content":"{}"}}",
+            writeln!(file, r#"{{"timestamp":{},"agent":"{}","kind":"{}","content":"{}"}}"#,
                 e.timestamp, escape(&e.agent), escape(&e.kind), escape(&e.content))?;
         }
         Ok(())
@@ -41,7 +41,7 @@ impl Memory {
 }
 
 fn escape(s: &str) -> String {
-    s.replace('\\', "\\\\").replace('"', "\"").replace('\n', "\\n").replace('\r', "\\r")
+    s.replace('\\', "\\\\").replace('"', "\\"").replace('\n', "\\n").replace('\r', "\\r")
 }
 fn unix_seconds() -> u64 {
     std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).unwrap_or_default().as_secs()
