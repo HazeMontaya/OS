@@ -13,13 +13,15 @@ use os_research::ResearchPolicy;
 use os_orchestration::{AgentHandoff, DecisionRecord, Goal, GoalGraph, GoalStatus, NodeKind, WorkGraph, WorkItem, WorkspaceRegistry};
 use os_model::{ModelCandidate, ModelRouter, RoutingDecision, ModelError};
 use os_system_model::{EntityKind, Evidence, SystemModel, VerificationStatus};
+use os_observer::{Observation, ObserverHub, SystemObserver};
+use os_scheduler::{ScheduledJob, Scheduler, Trigger};
 use std::path::PathBuf;
 use std::sync::atomic::{AtomicBool,Ordering};
 use std::time::Duration;
 
 #[derive(Clone,Debug)] pub struct Agent{pub id:String,pub role:String}
 #[derive(Clone,Debug)] pub struct CycleResult{pub kind:String,pub agent:String,pub summary:String,pub success:bool}
-#[derive(Clone,Debug)] pub struct RuntimeSnapshot{pub agents:Vec<Agent>,pub treasury:TreasurySnapshot,pub survival:SurvivalDecision,pub opportunities:usize,pub changes:usize,pub events:usize,pub queued_tasks:usize,pub customers:usize,pub outstanding_invoices_cents:i64,pub work_items:usize,pub workspaces:usize,pub decisions:usize,pub model_candidates:usize,pub goals:usize,pub system_entities:usize,pub system_relations:usize,pub system_evidence:usize}
+#[derive(Clone,Debug)] pub struct RuntimeSnapshot{pub agents:Vec<Agent>,pub treasury:TreasurySnapshot,pub survival:SurvivalDecision,pub opportunities:usize,pub changes:usize,pub events:usize,pub queued_tasks:usize,pub customers:usize,pub outstanding_invoices_cents:i64,pub work_items:usize,pub workspaces:usize,pub decisions:usize,pub model_candidates:usize,pub goals:usize,pub system_entities:usize,pub system_relations:usize,pub system_evidence:usize,pub scheduled_jobs:usize,pub observations:usize}
 #[derive(Clone,Debug)] pub struct QueuedTask{pub agent:String,pub class:DecisionClass,pub cost:i64,pub tool:ToolRequest,pub approval:bool}
 
 #[derive(serde::Serialize, serde::Deserialize)]
@@ -32,7 +34,7 @@ struct PersistedOrchestrationState {
 
 pub struct Runtime{
  pub agents:Vec<Agent>,pub treasury:Treasury,pub opportunities:Vec<RevenueProject>,pub changes:Vec<ChangeProposal>,
- pub execution:ExecutionEngine,pub model:EnvModelConfig,pub model_router:ModelRouter,pub planner:RulePlanner,pub commerce:Commerce,pub research_policy:ResearchPolicy,pub pending_tasks:Vec<QueuedTask>,pub events:EventLog,pub memory:Memory,pub context:ExecutionContext,pub work_graph:WorkGraph,pub work_items:Vec<WorkItem>,pub workspaces:WorkspaceRegistry,pub decisions:Vec<DecisionRecord>,pub system_model:SystemModel,pub goals:GoalGraph,thresholds:SurvivalThresholds,next_task:u64
+ pub execution:ExecutionEngine,pub model:EnvModelConfig,pub model_router:ModelRouter,pub planner:RulePlanner,pub commerce:Commerce,pub research_policy:ResearchPolicy,pub pending_tasks:Vec<QueuedTask>,pub events:EventLog,pub memory:Memory,pub context:ExecutionContext,pub work_graph:WorkGraph,pub work_items:Vec<WorkItem>,pub workspaces:WorkspaceRegistry,pub decisions:Vec<DecisionRecord>,pub system_model:SystemModel,pub goals:GoalGraph,pub scheduler:Scheduler,pub observers:ObserverHub,pub observations:Vec<Observation>,thresholds:SurvivalThresholds,next_task:u64
 }
 impl Runtime{
  pub fn new(initial_balance_cents:i64)->Self{
@@ -48,11 +50,14 @@ impl Runtime{
   let system_model=bootstrap_system_model(&agents);
   let mut goals=GoalGraph::default();
   let _=goals.add_goal(Goal{id:"mission:james".into(),title:"Operate JAMES".into(),description:"Keep the autonomous control plane healthy, useful, governed, and economically sustainable.".into(),status:GoalStatus::Active,parent_id:None,depends_on:std::collections::BTreeSet::new()});
+  let mut scheduler=Scheduler::default();
+  let _=scheduler.schedule(ScheduledJob{id:"system-health".into(),trigger:Trigger::IntervalMs{every_ms:30_000},action:"system.observe".into(),next_due_ms:0,enabled:true,runs:0});
+  let mut observers=ObserverHub::default(); observers.register(Box::new(SystemObserver));
   Self{agents,treasury,opportunities:vec![],changes:vec![],execution:ExecutionEngine::default(),model,model_router,planner:RulePlanner::default(),commerce:Commerce::default(),research_policy:ResearchPolicy::default(),pending_tasks:vec![],events:EventLog::default(),memory:Memory::default(),
    context:ExecutionContext{workspace_root:PathBuf::from("."),allowed_commands:vec!["cargo".into(),"rustc".into(),"git".into()],command_timeout:Duration::from_secs(30),max_output_bytes:64*1024},
-   work_graph,work_items:vec![],workspaces,decisions:vec![],system_model,goals,thresholds:SurvivalThresholds{explore_days:30,operate_days:14,optimize_days:7,emergency_days:2},next_task:1}
+   work_graph,work_items:vec![],workspaces,decisions:vec![],system_model,goals,scheduler,observers,observations:vec![],thresholds:SurvivalThresholds{explore_days:30,operate_days:14,optimize_days:7,emergency_days:2},next_task:1}
  }
- pub fn snapshot(&self)->RuntimeSnapshot{let t=self.treasury.snapshot(self.thresholds);RuntimeSnapshot{agents:self.agents.clone(),survival:os_survival::replan(t.mode),treasury:t,opportunities:self.opportunities.len(),changes:self.changes.len(),events:self.events.len(),queued_tasks:self.pending_tasks.len(),customers:self.commerce.customers.len(),outstanding_invoices_cents:self.commerce.outstanding_cents(),work_items:self.work_items.len(),workspaces:self.workspaces.all().count(),decisions:self.decisions.len(),model_candidates:self.model_router.candidates().len(),goals:self.goals.goals.len(),system_entities:self.system_model.entities.len(),system_relations:self.system_model.relations.len(),system_evidence:self.system_model.evidence.len()}}
+ pub fn snapshot(&self)->RuntimeSnapshot{let t=self.treasury.snapshot(self.thresholds);RuntimeSnapshot{agents:self.agents.clone(),survival:os_survival::replan(t.mode),treasury:t,opportunities:self.opportunities.len(),changes:self.changes.len(),events:self.events.len(),queued_tasks:self.pending_tasks.len(),customers:self.commerce.customers.len(),outstanding_invoices_cents:self.commerce.outstanding_cents(),work_items:self.work_items.len(),workspaces:self.workspaces.all().count(),decisions:self.decisions.len(),model_candidates:self.model_router.candidates().len(),goals:self.goals.goals.len(),system_entities:self.system_model.entities.len(),system_relations:self.system_model.relations.len(),system_evidence:self.system_model.evidence.len(),scheduled_jobs:self.scheduler.all().count(),observations:self.observations.len()}}
  pub fn next_ready_goals(&self)->Vec<&Goal>{ self.goals.ready() }
  pub fn set_goal_status(&mut self,id:&str,status:GoalStatus)->Result<(),String>{ self.goals.set_status(id,status) }
  pub fn route_model(&self, task_kind:&str, min_quota_tokens:usize, max_latency_ms:Option<u32>) -> Result<RoutingDecision,ModelError> { self.model_router.route_for_task(task_kind,min_quota_tokens,max_latency_ms) }
@@ -135,7 +140,24 @@ impl Runtime{
     self.events.push(Event::RevenueStageAdvanced { opportunity_id: project.opportunity.id.clone(), stage: format!("{:?}", stage) });
     Some(stage)
  }
+ pub fn observe(&mut self)->Vec<Observation>{
+  let mut fresh=Vec::new();
+  for result in self.observers.observe_all(){ if let Ok(observation)=result { self.observations.push(observation.clone()); fresh.push(observation); } }
+  while self.observations.len()>256 { self.observations.remove(0); }
+  fresh
+ }
+ pub fn tick_scheduler(&mut self, now_ms:u128)->usize{
+  let jobs=self.scheduler.due(now_ms);
+  for job in &jobs {
+    if job.action=="system.observe" {
+      let observations=self.observe();
+      self.events.push(Event::HeartbeatFinished{agent:"observer".into(),status:format!("{} observations",observations.len())});
+    }
+  }
+  jobs.len()
+ }
  pub fn run_cycle(&mut self) -> CycleResult {
+  self.tick_scheduler(now_ms() as u128);
   let mode = self.snapshot().treasury.mode;
   self.memory.remember("agent-01", "cycle", format!("autonomous cycle started in {:?}", mode));
   if let Some(result) = self.execute_next_queued_task() { return CycleResult { kind: "task".into(), agent: "scheduler".into(), summary: result.message.clone(), success: result.status == TaskStatus::Completed }; }
