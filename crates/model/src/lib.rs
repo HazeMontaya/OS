@@ -79,3 +79,70 @@ impl ModelProvider for OpenAiResponsesProvider {
         Ok(ModelResponse { text: text.into(), model: self.model.clone(), usage_tokens })
     }
 }
+
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct ModelCandidate {
+    pub provider: String,
+    pub model: String,
+    pub healthy: bool,
+    pub remaining_quota_tokens: usize,
+    pub estimated_cost_micros: u64,
+    pub latency_ms: u32,
+}
+
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct RoutingDecision {
+    pub provider: String,
+    pub model: String,
+    pub reason: String,
+}
+
+#[derive(Clone, Debug, Default)]
+pub struct ModelRouter {
+    candidates: Vec<ModelCandidate>,
+}
+
+impl ModelRouter {
+    pub fn register(&mut self, candidate: ModelCandidate) {
+        self.candidates.retain(|c| !(c.provider == candidate.provider && c.model == candidate.model));
+        self.candidates.push(candidate);
+    }
+
+    pub fn candidates(&self) -> &[ModelCandidate] {
+        &self.candidates
+    }
+
+    pub fn route(&self, min_quota_tokens: usize, max_latency_ms: Option<u32>) -> Result<RoutingDecision, ModelError> {
+        let mut available: Vec<&ModelCandidate> = self.candidates.iter()
+            .filter(|c| c.healthy && c.remaining_quota_tokens >= min_quota_tokens)
+            .filter(|c| max_latency_ms.map(|limit| c.latency_ms <= limit).unwrap_or(true))
+            .collect();
+        available.sort_by_key(|c| (c.estimated_cost_micros, c.latency_ms, &c.provider, &c.model));
+        let c = available.first().ok_or_else(|| ModelError::Unavailable("no healthy model satisfies routing constraints".into()))?;
+        Ok(RoutingDecision {
+            provider: c.provider.clone(),
+            model: c.model.clone(),
+            reason: format!("lowest estimated cost under quota/latency constraints"),
+        })
+    }
+}
+
+#[cfg(test)]
+mod router_tests {
+    use super::*;
+
+    #[test]
+    fn router_prefers_lower_cost() {
+        let mut r = ModelRouter::default();
+        r.register(ModelCandidate { provider: "a".into(), model: "slow".into(), healthy: true, remaining_quota_tokens: 1000, estimated_cost_micros: 20, latency_ms: 100 });
+        r.register(ModelCandidate { provider: "b".into(), model: "cheap".into(), healthy: true, remaining_quota_tokens: 1000, estimated_cost_micros: 10, latency_ms: 100 });
+        assert_eq!(r.route(10, None).unwrap().provider, "b");
+    }
+
+    #[test]
+    fn router_filters_unhealthy() {
+        let mut r = ModelRouter::default();
+        r.register(ModelCandidate { provider: "a".into(), model: "x".into(), healthy: false, remaining_quota_tokens: 1000, estimated_cost_micros: 1, latency_ms: 1 });
+        assert!(r.route(1, None).is_err());
+    }
+}
