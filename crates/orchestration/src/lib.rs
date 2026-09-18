@@ -2,20 +2,22 @@ use os_governance::DecisionClass;
 use std::collections::{BTreeMap, BTreeSet};
 
 #[derive(serde::Serialize, serde::Deserialize, Clone, Copy, Debug, Eq, PartialEq)]
-pub enum GoalStatus {
-    Proposed,
-    Active,
-    Blocked,
-    Completed,
-    Failed,
-    Cancelled,
-}
+pub enum GoalKind { Mission, Objective, Task }
+
+#[derive(serde::Serialize, serde::Deserialize, Clone, Copy, Debug, Eq, PartialEq)]
+pub enum GoalAction { ObserveSystem, VerifyRuntime, AdvanceRevenue, Research, Build, Test, Review }
+
+#[derive(serde::Serialize, serde::Deserialize, Clone, Copy, Debug, Eq, PartialEq)]
+pub enum GoalStatus { Proposed, Active, Blocked, Completed, Failed, Cancelled }
 
 #[derive(serde::Serialize, serde::Deserialize, Clone, Debug, Eq, PartialEq)]
 pub struct Goal {
     pub id: String,
     pub title: String,
     pub description: String,
+    pub kind: GoalKind,
+    pub action: Option<GoalAction>,
+    pub owner_agent: Option<String>,
     pub status: GoalStatus,
     pub parent_id: Option<String>,
     pub depends_on: BTreeSet<String>,
@@ -55,6 +57,8 @@ impl GoalGraph {
             .filter(|goal| goal.depends_on.iter().all(|id| self.goals.get(id).map(|g| g.status == GoalStatus::Completed).unwrap_or(false) || goal.depends_on.is_empty()))
             .collect()
     }
+
+    pub fn actionable_ready(&self) -> Vec<&Goal> { self.ready().into_iter().filter(|goal| goal.kind == GoalKind::Task && goal.action.is_some()).collect() }
 
     pub fn set_status(&mut self, id: &str, status: GoalStatus) -> Result<(), String> {
         let goal=self.goals.get_mut(id).ok_or_else(|| "unknown goal".to_string())?;
@@ -358,7 +362,7 @@ impl DecisionRecord {
 mod tests {
     use super::*;
     fn node(id:&str)->WorkNode{WorkNode{id:id.into(),label:id.into(),agent_id:None,kind:NodeKind::Agent,class:DecisionClass::ReadOnly}}
-    #[test] fn goal_graph_enforces_dependencies(){let mut g=GoalGraph::default();g.add_goal(Goal{id:"a".into(),title:"A".into(),description:"".into(),status:GoalStatus::Proposed,parent_id:None,depends_on:BTreeSet::new()}).unwrap();let mut deps=BTreeSet::new();deps.insert("a".into());g.add_goal(Goal{id:"b".into(),title:"B".into(),description:"".into(),status:GoalStatus::Proposed,parent_id:None,depends_on:deps}).unwrap();assert_eq!(g.ready().len(),1);g.set_status("a",GoalStatus::Completed).unwrap();assert_eq!(g.ready()[0].id,"b");}
+    #[test] fn goal_graph_enforces_dependencies(){let mut g=GoalGraph::default();g.add_goal(Goal{id:"a".into(),title:"A".into(),description:"".into(),kind:GoalKind::Objective,action:None,owner_agent:None,status:GoalStatus::Proposed,parent_id:None,depends_on:BTreeSet::new()}).unwrap();let mut deps=BTreeSet::new();deps.insert("a".into());g.add_goal(Goal{id:"b".into(),title:"B".into(),description:"".into(),kind:GoalKind::Task,action:Some(GoalAction::VerifyRuntime),owner_agent:Some("agent-04".into()),status:GoalStatus::Proposed,parent_id:None,depends_on:deps}).unwrap();assert_eq!(g.ready().len(),1);g.set_status("a",GoalStatus::Completed).unwrap();assert_eq!(g.ready()[0].id,"b");}
     #[test] fn graph_blocks_cycles(){let mut g=WorkGraph::default();g.add_node(node("a")).unwrap();g.add_node(node("b")).unwrap();g.connect("a","b",4).unwrap();assert!(g.connect("b","a",4).is_err());}
     #[test] fn work_item_handoff(){let mut g=WorkGraph::default();g.add_node(node("a")).unwrap();g.add_node(node("b")).unwrap();g.connect("a","b",4).unwrap();let mut w=g.start_item("w1","telegram","payload:1","a").unwrap();let h=g.handoff(&mut w,"b","handoff-1").unwrap();assert_eq!(w.hops,1);assert_eq!(h.from_agent,"a");assert_eq!(h.to_agent,"b");}
     #[test] fn workspace_lifecycle(){let mut r=WorkspaceRegistry::default();r.ensure("agent-01",".");r.begin_run("agent-01").unwrap();assert_eq!(r.get("agent-01").unwrap().status,WorkspaceStatus::Running);assert_eq!(r.get("agent-01").unwrap().active_runs,1);r.finish_run("agent-01").unwrap();assert_eq!(r.get("agent-01").unwrap().status,WorkspaceStatus::Ready);}
