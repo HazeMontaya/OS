@@ -88,9 +88,34 @@ match output{
     fn failed(mut r:ExecutionResult,message:String)->ExecutionResult{r.status=TaskStatus::Failed;r.message=message;r}
 }
 fn safe_path(root:&Path,requested:&Path)->Result<PathBuf,String>{
-    let candidate=if requested.is_absolute(){requested.to_path_buf()}else{root.join(requested)};
+    use std::path::Component;
     let root=root.canonicalize().map_err(|e|e.to_string())?;
-    let parent=candidate.parent().ok_or_else(||"invalid path".to_string())?;
-    let parent=parent.canonicalize().unwrap_or_else(|_|parent.to_path_buf());
-    if !parent.starts_with(&root){return Err("path escapes workspace".into());} Ok(candidate)
+    let relative=if requested.is_absolute(){
+        requested.strip_prefix(&root).map_err(|_|"absolute path escapes workspace".to_string())?
+    }else{requested};
+    let mut candidate=root.clone();
+    for component in relative.components(){
+        match component{
+            Component::Normal(part)=>candidate.push(part),
+            Component::CurDir=>{},
+            Component::ParentDir=>{
+                if !candidate.pop() || !candidate.starts_with(&root){return Err("path escapes workspace".into());}
+            },
+            Component::RootDir|Component::Prefix(_)=>return Err("rooted path escapes workspace".into()),
+        }
+    }
+    if candidate.starts_with(&root){Ok(candidate)}else{Err("path escapes workspace".into())}
+}
+
+#[cfg(test)]
+mod security_tests{
+    use super::*;
+    #[test]
+    fn nonexisting_parent_traversal_is_rejected(){
+        let root=std::env::temp_dir().join(format!("haze-safe-root-{}",std::process::id()));
+        std::fs::create_dir_all(&root).unwrap();
+        let result=safe_path(&root,Path::new("missing/../../outside.txt"));
+        assert!(result.is_err());
+        let _=std::fs::remove_dir_all(root);
+    }
 }
