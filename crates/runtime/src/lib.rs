@@ -154,6 +154,11 @@ impl Runtime{
      }
      Ok(())
  }
+ pub fn load_journals(&mut self, events: impl AsRef<std::path::Path>, memory: impl AsRef<std::path::Path>) -> std::io::Result<()> {
+     self.events=EventLog::load_journal(events)?;
+     self.memory=Memory::load_journal(memory)?;
+     Ok(())
+ }
  pub fn checkpoint(&self, state: impl AsRef<std::path::Path>, events: impl AsRef<std::path::Path>, memory: impl AsRef<std::path::Path>) -> std::io::Result<()> {
      self.save_state(state)?; self.events.append_journal(events)?; self.memory.append_journal(memory)
  }
