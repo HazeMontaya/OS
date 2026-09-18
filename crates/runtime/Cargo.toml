@@ -9,5 +9,8 @@ os-agents = { path = "../agents" }
 os-automation = { path = "../automation" }
 os-system = { path = "../system" }
 os-tools = { path = "../tools" }
+os-economy = { path = "../economy" }
+os-governance = { path = "../governance" }
+os-survival = { path = "../survival" }
 serde.workspace = true
 serde_json.workspace = true
