@@ -1,10 +1,14 @@
 use os_governance::DecisionClass;
 use os_revenue::Opportunity;
 use os_execution::ToolRequest;
-use std::path::PathBuf;
+use os_runtime::Runtime;
+use std::io::{self, BufRead};
+use std::sync::{Arc,atomic::{AtomicBool,Ordering}};
+use std::thread;
+use std::time::Duration;
 
 fn main() {
-    let mut runtime = os_runtime::Runtime::new(100_000);
+    let mut runtime = Runtime::new(100_000);
     runtime.register_opportunity(Opportunity {
         id: "bootstrap-product".into(),
         name: "Bootstrap Product".into(),
@@ -21,13 +25,35 @@ fn main() {
     println!("runway: {:?}", snapshot.treasury.runway_days);
     println!("mode: {:?}", snapshot.treasury.mode);
     println!("survival: {:?}", snapshot.survival);
+    println!();
+    println!("AUTONOMOUS LOOP: running continuously.");
+    println!("Type 'stop' and press Enter to stop cleanly.");
 
-    if let Some(index) = runtime.next_revenue_project() {
-        println!("selected opportunity: {}", runtime.opportunities[index].opportunity.name);
-        println!("stage: {:?}", runtime.advance_best_revenue_project());
-    }
+    let stop = Arc::new(AtomicBool::new(false));
+    let stop_input = Arc::clone(&stop);
+    thread::spawn(move || {
+        let stdin = io::stdin();
+        for line in stdin.lock().lines() {
+            match line {
+                Ok(line) if line.trim().eq_ignore_ascii_case("stop") => {
+                    stop_input.store(true, Ordering::Relaxed);
+                    break;
+                }
+                Ok(_) => {}
+                Err(_) => {
+                    stop_input.store(true, Ordering::Relaxed);
+                    break;
+                }
+            }
+        }
+    });
 
-    let result = runtime.heartbeat(
+    let cycles = runtime.run_until_stopped(&stop, Duration::from_secs(2));
+    println!();
+    println!("Stopped after {cycles} autonomous cycles.");
+    println!("events: {}", runtime.snapshot().events);
+
+    let _ = runtime.heartbeat(
         "agent-02",
         DecisionClass::ReadOnly,
         0,
@@ -37,6 +63,4 @@ fn main() {
         },
         false,
     );
-    println!("heartbeat: {:?} — {}", result.status, result.message);
-    println!("events: {}", runtime.snapshot().events);
 }
