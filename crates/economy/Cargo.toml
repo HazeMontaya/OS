@@ -1,0 +1,10 @@
+[package]
+name = "os-economy"
+version.workspace = true
+edition.workspace = true
+publish = false
+
+[dependencies]
+serde.workspace = true
+thiserror.workspace = true
+uuid.workspace = true
