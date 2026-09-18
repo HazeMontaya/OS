@@ -7,14 +7,16 @@ use std::time::Duration;
 
 fn main() {
     let mut runtime = Runtime::new(100_000);\n    let state = std::path::PathBuf::from(".os/state.tsv");\n    let events = std::path::PathBuf::from(".os/events.log");\n    let memory = std::path::PathBuf::from(".os/memory.log");\n    if let Err(e) = runtime.load_state(&state) { eprintln!("state recovery warning: {e}"); }
-    runtime.register_opportunity(Opportunity {
-        id: "bootstrap-product".into(),
-        name: "Bootstrap Product".into(),
-        hypothesis: "A small validated digital service can fund the runtime.".into(),
-        expected_revenue_cents: 25_000,
-        expected_cost_cents: 2_000,
-        confidence_bps: 6_000,
-    });
+    if !runtime.opportunities.iter().any(|p| p.opportunity.id == "bootstrap-product") {
+        runtime.register_opportunity(Opportunity {
+            id: "bootstrap-product".into(),
+            name: "Bootstrap Product".into(),
+            hypothesis: "A small validated digital service can fund the runtime.".into(),
+            expected_revenue_cents: 25_000,
+            expected_cost_cents: 2_000,
+            confidence_bps: 6_000,
+        });
+    }
 
     let snapshot = runtime.snapshot();
     println!("HazeMontaya OS");
