@@ -97,7 +97,7 @@ impl Runtime{
      let task=self.pending_tasks.first()?.clone();
      self.pending_tasks.remove(0);
      let result=self.submit_task(&task.agent,task.class,task.cost,task.tool,task.approval);
-     if let Some(goal_id)=task.goal_id { let _=self.goals.set_status(&goal_id,if result.status==TaskStatus::Completed {GoalStatus::Completed}else{GoalStatus::Failed}); }
+     if let Some(goal_id)=task.goal_id { let success=result.status==TaskStatus::Completed; let _=self.goals.set_status(&goal_id,if success {GoalStatus::Completed}else{GoalStatus::Failed}); self.events.push(Event::GoalCompleted{goal_id,success}); }
      Some(result)
  }
  pub fn submit_task(&mut self,agent:&str,class:DecisionClass,cost:i64,tool:ToolRequest,approval:bool)->ExecutionResult{
@@ -186,8 +186,10 @@ impl Runtime{
       os_orchestration::GoalAction::Test => (ToolRequest::RunCommand{program:"cargo".into(),args:vec!["test".into(),"--workspace".into()]},DecisionClass::External,0),
       os_orchestration::GoalAction::Review => (ToolRequest::RunCommand{program:"cargo".into(),args:vec!["fmt".into(),"--all".into(),"--".into(),"--check".into()]},DecisionClass::External,0),
     };
-    self.queue_task_with_goal(agent,class,cost,tool,false,goal_id);
-    count+=1;
+    self.queue_task_with_goal(agent,class,cost,tool,false,goal_id.clone());
+  let task_id=format!("planned-goal:{}",goal_id);
+  self.events.push(Event::GoalMaterialized{goal_id,task_id});
+  count+=1;
   }
   count
  }
