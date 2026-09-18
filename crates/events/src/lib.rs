@@ -18,6 +18,8 @@ pub enum Event {
     AgentHandoff { work_item_id: String, from_agent: String, to_agent: String },
     ModelRouted { task_kind: String, provider: String, model: String },
     ModelFailed { task_kind: String, provider: String, model: String, reason: String },
+    GoalMaterialized { goal_id: String, task_id: String },
+    GoalCompleted { goal_id: String, success: bool },
     RevenueStageAdvanced { opportunity_id: String, stage: String },
     RevenueRecorded { cents: i64, memo: String },
     ExpenseRecorded { cents: i64, memo: String },
@@ -169,6 +171,8 @@ fn encode(event: &Event) -> String {
         ),
         Event::ModelRouted { task_kind, provider, model } => format!("ModelRouted\t{}\t{}\t{}", esc(task_kind), esc(provider), esc(model)),
         Event::ModelFailed { task_kind, provider, model, reason } => format!("ModelFailed\t{}\t{}\t{}\t{}", esc(task_kind), esc(provider), esc(model), esc(reason)),
+        Event::GoalMaterialized { goal_id, task_id } => format!("GoalMaterialized\t{}\t{}", esc(goal_id), esc(task_id)),
+        Event::GoalCompleted { goal_id, success } => format!("GoalCompleted\t{}\t{}", esc(goal_id), success),
         Event::RevenueStageAdvanced { opportunity_id, stage } => {
             format!("RevenueStageAdvanced\t{}\t{}", esc(opportunity_id), esc(stage))
         }
@@ -238,6 +242,8 @@ fn decode(line: &str) -> Option<Event> {
         "AgentHandoff" => Event::AgentHandoff { work_item_id: value(parts.next())?, from_agent: value(parts.next())?, to_agent: value(parts.next())? },
         "ModelRouted" => Event::ModelRouted { task_kind: value(parts.next())?, provider: value(parts.next())?, model: value(parts.next())? },
         "ModelFailed" => Event::ModelFailed { task_kind: value(parts.next())?, provider: value(parts.next())?, model: value(parts.next())?, reason: value(parts.next())? },
+        "GoalMaterialized" => Event::GoalMaterialized { goal_id: value(parts.next())?, task_id: value(parts.next())? },
+        "GoalCompleted" => Event::GoalCompleted { goal_id: value(parts.next())?, success: parts.next()?.parse().ok()? },
         "RevenueStageAdvanced" => Event::RevenueStageAdvanced {
             opportunity_id: value(parts.next())?,
             stage: value(parts.next())?,
