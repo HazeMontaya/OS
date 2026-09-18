@@ -163,8 +163,8 @@ fn handle(mut stream: TcpStream, rt: &mut Runtime, index: &str) {
             let deps=form_value(body,"depends_on").unwrap_or_default().split(',').map(str::trim).filter(|v|!v.is_empty()).map(str::to_owned).collect::<BTreeSet<_>>();
             let result=match action{Some(action)=>rt.create_task_goal(id,title,description,action,agent,deps),None=>Err("invalid or missing goal action".into())};
             match result{
-                Ok(())=>response(&mut stream,"201 Created","application/json","{"ok":true}"),
-                Err(error)=>response(&mut stream,"400 Bad Request","application/json",&format!("{{"ok":false,"error":"{}"}}",json_escape(&error))),
+                Ok(())=>response(&mut stream,"201 Created","application/json","{\\"ok\\":true}"),
+                Err(error)=>response(&mut stream,"400 Bad Request","application/json",&format!("{{\\"ok\\":false,\\"error\\":\\"{}\\"}}",json_escape(&error))),
             }
         },
         ("POST", "/api/goals/status") => {
