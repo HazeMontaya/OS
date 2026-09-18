@@ -1,4 +1,5 @@
 use os_economy::{SurvivalThresholds,Treasury,TreasurySnapshot};
+use os_memory::Memory;
 use os_events::{Event,EventLog};
 use os_evolution::ChangeProposal;
 use os_execution::{AgentTask,ExecutionContext,ExecutionEngine,ExecutionResult,TaskStatus,ToolRequest};
@@ -11,14 +12,14 @@ use std::path::PathBuf;
 #[derive(Clone,Debug)] pub struct RuntimeSnapshot{pub agents:Vec<Agent>,pub treasury:TreasurySnapshot,pub survival:SurvivalDecision,pub opportunities:usize,pub changes:usize,pub events:usize}
 pub struct Runtime{
  pub agents:Vec<Agent>,pub treasury:Treasury,pub opportunities:Vec<RevenueProject>,pub changes:Vec<ChangeProposal>,
- pub execution:ExecutionEngine,pub events:EventLog,pub context:ExecutionContext,thresholds:SurvivalThresholds,next_task:u64
+ pub execution:ExecutionEngine,pub events:EventLog,pub memory:Memory,pub context:ExecutionContext,thresholds:SurvivalThresholds,next_task:u64
 }
 impl Runtime{
  pub fn new(initial_balance_cents:i64)->Self{
   let roles=["Governor","Research","Business","Engineering","Content","Finance","Operations","QA","Security"];
   let agents=roles.iter().enumerate().map(|(i,r)|Agent{id:format!("agent-{:02}",i+1),role:(*r).into()}).collect();
   let mut treasury=Treasury::new(initial_balance_cents);treasury.set_burn_rate(100);
-  Self{agents,treasury,opportunities:vec![],changes:vec![],execution:ExecutionEngine::default(),events:EventLog::default(),
+  Self{agents,treasury,opportunities:vec![],changes:vec![],execution:ExecutionEngine::default(),events:EventLog::default(),memory:Memory::default(),
    context:ExecutionContext{workspace_root:PathBuf::from("."),allowed_commands:vec!["cargo".into(),"rustc".into(),"git".into()]},
    thresholds:SurvivalThresholds{explore_days:30,operate_days:14,optimize_days:7,emergency_days:2},next_task:1}
  }
@@ -34,7 +35,18 @@ impl Runtime{
    if result.status==TaskStatus::Completed{self.events.push(Event::TaskCompleted{task_id:task.id.clone()});} result
   }else{self.events.push(Event::TaskBlocked{task_id:task.id.clone(),reason:planned.message.clone()});planned}
  }
- pub fn register_opportunity(&mut self,o:Opportunity){self.opportunities.push(RevenueProject::new(o))}
+ pub fn heartbeat(&mut self, agent:&str, class:DecisionClass, cost:i64, tool:ToolRequest, approval:bool) -> ExecutionResult {
+  self.memory.remember(agent, "thought", "select task and execute through governance");
+  let result = self.submit_task(agent, class, cost, tool, approval);
+  self.memory.remember(agent, "observation", format!("{:?}: {}", result.status, result.message));
+  result
+}
+
+pub fn persist_memory(&self, path: impl AsRef<std::path::Path>) -> std::io::Result<()> {
+  self.memory.append_jsonl(path)
+}
+
+pub fn register_opportunity(&mut self,o:Opportunity){self.opportunities.push(RevenueProject::new(o))}
  pub fn register_change(&mut self,p:ChangeProposal){self.changes.push(p)}
  pub fn record_revenue(&mut self,cents:i64,memo:impl Into<String>){let memo=memo.into();self.treasury.record_revenue(cents,memo.clone());self.events.push(Event::RevenueRecorded{cents,memo});}
  pub fn record_expense(&mut self,cents:i64,memo:impl Into<String>)->Result<(),&'static str>{let memo=memo.into();let r=self.treasury.record_expense(cents,memo.clone());if r.is_ok(){self.events.push(Event::ExpenseRecorded{cents,memo});}r}
