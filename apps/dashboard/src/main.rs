@@ -2,10 +2,9 @@ use os_events::Event;
 use os_runtime::Runtime;
 use std::io::{Read, Write};
 use std::net::{TcpListener, TcpStream};
-use std::path::PathBuf;
 
 fn json_escape(s: &str) -> String {
-    s.replace('\\', "\\\\").replace('"', "\\"").replace('\n', "\\n").replace('\r', "\\r")
+    s.replace('\\', "\\\\").replace('"', "\\\"").replace('\n', "\\n").replace('\r', "\\r")
 }
 fn state_json(rt: &Runtime) -> String {
     let s = rt.snapshot();
