@@ -6,7 +6,7 @@ use std::thread;
 use std::time::Duration;
 
 fn main() {
-    let mut runtime = Runtime::new(100_000);
+    let mut runtime = Runtime::new(100_000);\n    let state = std::path::PathBuf::from(".os/state.tsv");\n    let events = std::path::PathBuf::from(".os/events.log");\n    let memory = std::path::PathBuf::from(".os/memory.log");\n    if let Err(e) = runtime.load_state(&state) { eprintln!("state recovery warning: {e}"); }
     runtime.register_opportunity(Opportunity {
         id: "bootstrap-product".into(),
         name: "Bootstrap Product".into(),
@@ -46,7 +46,7 @@ fn main() {
         }
     });
 
-    let cycles = runtime.run_until_stopped(&stop, Duration::from_secs(2));
+    let mut cycles = 0usize;\n    while !stop.load(Ordering::Relaxed) {\n        let _ = runtime.run_cycle();\n        cycles += 1;\n        if let Err(e) = runtime.checkpoint(&state, &events, &memory) { eprintln!("checkpoint warning: {e}"); }\n        let mut waited = Duration::ZERO;\n        while waited < Duration::from_secs(2) && !stop.load(Ordering::Relaxed) {\n            let slice = (Duration::from_secs(2) - waited).min(Duration::from_millis(250));\n            thread::sleep(slice);\n            waited += slice;\n        }\n    }
     println!();
     println!("Stopped after {cycles} autonomous cycles.");
     let final_snapshot = runtime.snapshot();
