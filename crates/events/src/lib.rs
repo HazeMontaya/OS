@@ -16,6 +16,8 @@ pub enum Event {
     HeartbeatStarted { agent: String },
     HeartbeatFinished { agent: String, status: String },
     AgentHandoff { work_item_id: String, from_agent: String, to_agent: String },
+    ModelRouted { task_kind: String, provider: String, model: String },
+    ModelFailed { task_kind: String, provider: String, model: String, reason: String },
     RevenueStageAdvanced { opportunity_id: String, stage: String },
     RevenueRecorded { cents: i64, memo: String },
     ExpenseRecorded { cents: i64, memo: String },
@@ -231,11 +233,9 @@ fn decode(line: &str) -> Option<Event> {
             agent: value(parts.next())?,
             status: value(parts.next())?,
         },
-        "AgentHandoff" => Event::AgentHandoff {
-            work_item_id: value(parts.next())?,
-            from_agent: value(parts.next())?,
-            to_agent: value(parts.next())?,
-        },
+        "AgentHandoff" => Event::AgentHandoff { work_item_id: value(parts.next())?, from_agent: value(parts.next())?, to_agent: value(parts.next())? },
+        "ModelRouted" => Event::ModelRouted { task_kind: value(parts.next())?, provider: value(parts.next())?, model: value(parts.next())? },
+        "ModelFailed" => Event::ModelFailed { task_kind: value(parts.next())?, provider: value(parts.next())?, model: value(parts.next())?, reason: value(parts.next())? },
         "RevenueStageAdvanced" => Event::RevenueStageAdvanced {
             opportunity_id: value(parts.next())?,
             stage: value(parts.next())?,
