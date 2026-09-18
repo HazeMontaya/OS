@@ -42,7 +42,8 @@ impl GoalGraph {
         }
         self.goals.insert(goal.id.clone(), goal);
         if self.has_cycle() {
-            self.goals.remove(self.goals.keys().next_back().expect("goal inserted").as_str());
+            let inserted_id=self.goals.keys().next_back().cloned().expect("goal inserted");
+            self.goals.remove(&inserted_id);
             return Err("goal dependency cycle is blocked".into());
         }
         Ok(())
