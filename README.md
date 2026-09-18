@@ -1,31 +1,55 @@
 # HazeMontaya OS
 
-Autonomous multi-agent operating system foundation.
+Autonomous multi-agent runtime with economic controls, governed tool execution, memory, revenue lifecycle, event audit trail, and a live agent-world dashboard.
 
-## Runtime domains
-- Business
-- Research
-- Engineering
-- Content
-- Finance
-- Operations
-- Governance
-- QA
-- Security
+## What is implemented
 
-The runtime models the loop:
+- **9 agents:** Governor, Research, Business, Engineering, Content, Finance, Operations, QA, Security.
+- **Economic engine:** treasury, burn rate, runway and Explore/Operate/Optimize/Survival/Emergency modes.
+- **Governance:** explicit decision classes, approval gates and spending limits.
+- **Execution:** workspace-scoped file operations and allowlisted command execution.
+- **Memory:** in-process memory with JSONL persistence.
+- **Revenue engine:** opportunity scoring and lifecycle from discovery through measurement.
+- **Autonomous runtime:** bounded `run_cycle()` / `run_cycles()` loop with event and memory instrumentation.
+- **Audit events:** task, tool, heartbeat, revenue and accounting events.
+- **Dashboard:** browser UI showing live runtime state and agent world; the UI can trigger autonomous cycles.
 
-Perceive -> Decide -> Govern -> Execute -> Account -> Observe -> Replan
+## Run
 
-Economic survival is a budgeting policy: the system may prioritize revenue-producing work when runway falls, but financial, destructive, self-modifying and replication actions remain capability-gated.
+Install a current stable Rust toolchain, then:
 
-## Workspace
-
-```
-cargo run -p os-cli
+```bash
 cargo test --workspace
+cargo run -p os-cli
+cargo run -p os-dashboard
 ```
 
-## Safety boundary
+Open **http://127.0.0.1:8787** after starting the dashboard.
 
-This repository does not contain unrestricted payment authority, destructive host control, autonomous self-replication, or unrestricted self-modification. External capabilities are explicit and auditable.
+The dashboard is intentionally local-only by default. It does not expose the runtime to the public internet.
+
+## Important runtime boundary
+
+This repository contains real execution capabilities, but it is not yet a hardened production sandbox. Command execution is allowlisted and file access is constrained to the configured workspace, but there is currently no OS-level container isolation, CPU/memory quota, process timeout, secrets manager, payment provider, customer CRM, or production deployment controller.
+
+Revenue accounting is an internal ledger. Recording revenue does not itself move money. Real payments require an explicitly configured payment/billing integration and owner-controlled credentials.
+
+## Architecture
+
+```text
+Browser / Dashboard
+        |
+        v
+   Runtime Loop
+        |
+   +----+-------------------------------+
+   |    |        |       |              |
+Memory Events  Economy Governance  Revenue
+                     |
+                     v
+                 Execution
+                     |
+          Files / Allowlisted Commands
+```
+
+The world layer is a visualization of runtime state. It is not the authority for execution, accounting, governance, or memory.
