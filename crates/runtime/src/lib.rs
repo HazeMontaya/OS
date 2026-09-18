@@ -1,10 +1,42 @@
-use os_economy::{SurvivalThresholds,Treasury,TreasurySnapshot};use os_evolution::ChangeProposal;use os_execution::{AgentTask,ExecutionEngine,ExecutionResult,TaskStatus};use os_governance::DecisionClass;use os_revenue::{Opportunity,RevenueProject};use os_survival::SurvivalDecision;
-#[derive(Clone,Debug)]pub struct Agent{pub id:String,pub role:String}
-#[derive(Clone,Debug)]pub struct RuntimeSnapshot{pub agents:Vec<Agent>,pub treasury:TreasurySnapshot,pub survival:SurvivalDecision,pub opportunities:usize,pub changes:usize}
-pub struct Runtime{pub agents:Vec<Agent>,pub treasury:Treasury,pub opportunities:Vec<RevenueProject>,pub changes:Vec<ChangeProposal>,pub execution:ExecutionEngine,thresholds:SurvivalThresholds,next_task:u64}
-impl Runtime{pub fn new(b:i64)->Self{let roles=["Governor","Research","Business","Engineering","Content","Finance","Operations","QA","Security"];let agents=roles.iter().enumerate().map(|(i,r)|Agent{id:format!("agent-{:02}",i+1),role:(*r).into()}).collect();let mut treasury=Treasury::new(b);treasury.set_burn_rate(100);Self{agents,treasury,opportunities:vec![],changes:vec![],execution:ExecutionEngine::default(),thresholds:SurvivalThresholds{explore_days:30,operate_days:14,optimize_days:7,emergency_days:2},next_task:1}}
-pub fn snapshot(&self)->RuntimeSnapshot{let t=self.treasury.snapshot(self.thresholds);RuntimeSnapshot{agents:self.agents.clone(),survival:os_survival::replan(t.mode),treasury:t,opportunities:self.opportunities.len(),changes:self.changes.len()}}
-pub fn submit_task(&mut self,a:&str,c:DecisionClass,cost:i64)->ExecutionResult{let s=self.snapshot();let task=AgentTask{id:format!("task-{:06}",self.next_task),agent:a.into(),class:c,estimated_cost_cents:cost.max(0),status:TaskStatus::Queued};self.next_task+=1;self.execution.plan(&task,&self.treasury,s.treasury.mode,s.survival)}
-pub fn register_opportunity(&mut self,o:Opportunity){self.opportunities.push(RevenueProject::new(o))}
-pub fn register_change(&mut self,p:ChangeProposal){self.changes.push(p)}}
-#[cfg(test)]mod tests{use super::*;#[test]fn boots(){assert_eq!(Runtime::new(100000).agents.len(),9)}#[test]fn readonly(){let mut r=Runtime::new(100000);assert_eq!(r.submit_task("agent-02",DecisionClass::ReadOnly,0).status,TaskStatus::Queued)}}
+use os_economy::{SurvivalThresholds,Treasury,TreasurySnapshot};
+use os_events::{Event,EventLog};
+use os_evolution::ChangeProposal;
+use os_execution::{AgentTask,ExecutionContext,ExecutionEngine,ExecutionResult,TaskStatus,ToolRequest};
+use os_governance::DecisionClass;
+use os_revenue::{Opportunity,RevenueProject};
+use os_survival::SurvivalDecision;
+use std::path::PathBuf;
+
+#[derive(Clone,Debug)] pub struct Agent{pub id:String,pub role:String}
+#[derive(Clone,Debug)] pub struct RuntimeSnapshot{pub agents:Vec<Agent>,pub treasury:TreasurySnapshot,pub survival:SurvivalDecision,pub opportunities:usize,pub changes:usize,pub events:usize}
+pub struct Runtime{
+ pub agents:Vec<Agent>,pub treasury:Treasury,pub opportunities:Vec<RevenueProject>,pub changes:Vec<ChangeProposal>,
+ pub execution:ExecutionEngine,pub events:EventLog,pub context:ExecutionContext,thresholds:SurvivalThresholds,next_task:u64
+}
+impl Runtime{
+ pub fn new(initial_balance_cents:i64)->Self{
+  let roles=["Governor","Research","Business","Engineering","Content","Finance","Operations","QA","Security"];
+  let agents=roles.iter().enumerate().map(|(i,r)|Agent{id:format!("agent-{:02}",i+1),role:(*r).into()}).collect();
+  let mut treasury=Treasury::new(initial_balance_cents);treasury.set_burn_rate(100);
+  Self{agents,treasury,opportunities:vec![],changes:vec![],execution:ExecutionEngine::default(),events:EventLog::default(),
+   context:ExecutionContext{workspace_root:PathBuf::from("."),allowed_commands:vec!["cargo".into(),"rustc".into(),"git".into()]},
+   thresholds:SurvivalThresholds{explore_days:30,operate_days:14,optimize_days:7,emergency_days:2},next_task:1}
+ }
+ pub fn snapshot(&self)->RuntimeSnapshot{let t=self.treasury.snapshot(self.thresholds);RuntimeSnapshot{agents:self.agents.clone(),survival:os_survival::replan(t.mode),treasury:t,opportunities:self.opportunities.len(),changes:self.changes.len(),events:self.events.len()}}
+ pub fn submit_task(&mut self,agent:&str,class:DecisionClass,cost:i64,tool:ToolRequest,approval:bool)->ExecutionResult{
+  let snap=self.snapshot();let task=AgentTask{id:format!("task-{:06}",self.next_task),agent:agent.into(),class,estimated_cost_cents:cost.max(0),status:TaskStatus::Queued,tool};
+  self.next_task+=1;let planned=self.execution.plan(&task,&self.treasury,snap.treasury.mode,snap.survival,approval);
+  if planned.status==TaskStatus::Queued{
+   self.events.push(Event::TaskQueued{task_id:task.id.clone(),agent:task.agent.clone()});
+   self.events.push(Event::TaskStarted{task_id:task.id.clone()});self.events.push(Event::ToolCalled{task_id:task.id.clone(),tool:task.tool.name().into()});
+   let result=self.execution.execute(&task,&self.context,planned);
+   self.events.push(Event::ToolCompleted{task_id:task.id.clone(),tool:task.tool.name().into(),success:result.status==TaskStatus::Completed});
+   if result.status==TaskStatus::Completed{self.events.push(Event::TaskCompleted{task_id:task.id.clone()});} result
+  }else{self.events.push(Event::TaskBlocked{task_id:task.id.clone(),reason:planned.message.clone()});planned}
+ }
+ pub fn register_opportunity(&mut self,o:Opportunity){self.opportunities.push(RevenueProject::new(o))}
+ pub fn register_change(&mut self,p:ChangeProposal){self.changes.push(p)}
+ pub fn record_revenue(&mut self,cents:i64,memo:impl Into<String>){let memo=memo.into();self.treasury.record_revenue(cents,memo.clone());self.events.push(Event::RevenueRecorded{cents,memo});}
+ pub fn record_expense(&mut self,cents:i64,memo:impl Into<String>)->Result<(),&'static str>{let memo=memo.into();let r=self.treasury.record_expense(cents,memo.clone());if r.is_ok(){self.events.push(Event::ExpenseRecorded{cents,memo});}r}
+}
+#[cfg(test)]mod tests{use super::*;#[test]fn boots(){assert_eq!(Runtime::new(100_000).agents.len(),9)}#[test]fn readonly_executes_real_tool(){let mut r=Runtime::new(100_000);r.context.workspace_root=std::env::temp_dir();let result=r.submit_task("agent-02",DecisionClass::ReadOnly,0,ToolRequest::ReadFile{path:PathBuf::from("haze-os-runtime-test.txt")},false);assert_eq!(result.status,TaskStatus::Failed);assert!(r.snapshot().events>=4);}}
