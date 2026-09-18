@@ -163,7 +163,7 @@ impl WorkGraph {
     }
 }
 
-#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+#[derive(serde::Serialize, serde::Deserialize, Clone, Copy, Debug, Eq, PartialEq)]
 pub enum WorkspaceStatus { Pending, Provisioning, Ready, Running, Sleeping, Recovery, Stopped }
 
 #[derive(serde::Serialize, serde::Deserialize, Clone, Debug, Eq, PartialEq)]
