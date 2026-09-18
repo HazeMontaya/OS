@@ -51,6 +51,7 @@ impl Runtime{
   let system_model=bootstrap_system_model(&agents);
   let mut goals=GoalGraph::default();
   let _=goals.add_goal(Goal{id:"mission:james".into(),title:"Operate JAMES".into(),description:"Keep the autonomous control plane healthy, useful, governed, and economically sustainable.".into(),kind:os_orchestration::GoalKind::Mission,action:None,owner_agent:None,status:GoalStatus::Active,parent_id:None,depends_on:std::collections::BTreeSet::new()});
+  let _=goals.add_goal(Goal{id:"goal:boot-health".into(),title:"Verify runtime workspace".into(),description:"Confirm that the runtime can read its canonical workspace before entering continuous operation.".into(),kind:os_orchestration::GoalKind::Task,action:Some(os_orchestration::GoalAction::VerifyRuntime),owner_agent:Some("agent-09".into()),status:GoalStatus::Proposed,parent_id:Some("mission:james".into()),depends_on:std::collections::BTreeSet::new()});
   let mut scheduler=Scheduler::default();
   let _=scheduler.schedule(ScheduledJob{id:"system-health".into(),trigger:Trigger::IntervalMs{every_ms:30_000},action:"system.observe".into(),next_due_ms:0,enabled:true,runs:0});
   let mut observers=ObserverHub::default(); observers.register(Box::new(SystemObserver));
@@ -175,11 +176,11 @@ impl Runtime{
   let goals=self.goals.actionable_ready().into_iter().map(|g|(g.id.clone(),g.action,g.owner_agent.clone())).collect::<Vec<_>>();
   let mut count=0;
   for (goal_id,action,owner_agent) in goals {
-    if self.pending_tasks.iter().any(|t| t.agent==owner_agent.clone().unwrap_or_else(||"agent-02".into())) || self.work_items.iter().any(|w| w.id==format!("goal:{goal_id}")) { continue; }
+    if self.pending_tasks.iter().any(|t| t.goal_id.as_deref()==Some(goal_id.as_str())) || self.work_items.iter().any(|w| w.origin==format!("goal:{goal_id}")) { continue; }
     let agent=owner_agent.unwrap_or_else(||"agent-02".into());
     let (tool,class,cost) = match action.unwrap() {
       os_orchestration::GoalAction::ObserveSystem => (ToolRequest::RunCommand{program:"rustc".into(),args:vec!["--version".into()]},DecisionClass::ReadOnly,0),
-      os_orchestration::GoalAction::VerifyRuntime => (ToolRequest::RunCommand{program:"cargo".into(),args:vec!["test".into(),"--workspace".into()]},DecisionClass::External,0),
+      os_orchestration::GoalAction::VerifyRuntime => (ToolRequest::ReadFile{path:PathBuf::from("Cargo.toml")},DecisionClass::ReadOnly,0),
       os_orchestration::GoalAction::AdvanceRevenue => (ToolRequest::RunCommand{program:"rustc".into(),args:vec!["--version".into()]},DecisionClass::ReadOnly,0),
       os_orchestration::GoalAction::Research => (ToolRequest::RunCommand{program:"rustc".into(),args:vec!["--version".into()]},DecisionClass::ReadOnly,0),
       os_orchestration::GoalAction::Build => (ToolRequest::RunCommand{program:"cargo".into(),args:vec!["build".into(),"--workspace".into()]},DecisionClass::External,0),
@@ -187,7 +188,8 @@ impl Runtime{
       os_orchestration::GoalAction::Review => (ToolRequest::RunCommand{program:"cargo".into(),args:vec!["fmt".into(),"--all".into(),"--".into(),"--check".into()]},DecisionClass::External,0),
     };
     self.queue_task_with_goal(agent,class,cost,tool,false,goal_id.clone());
-  let task_id=format!("planned-goal:{}",goal_id);
+  let task_id=format!("task-{:06}",self.next_task);
+  let _=self.goals.set_status(&goal_id,GoalStatus::Active);
   self.events.push(Event::GoalMaterialized{goal_id,task_id});
   count+=1;
   }
