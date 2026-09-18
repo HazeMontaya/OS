@@ -62,6 +62,20 @@ fn workflow_json(rt: &Runtime) -> String {
         nodes, edges, rt.work_items.len(), rt.workspaces.all().count(), rt.decisions.len())
 }
 
+
+fn system_json(rt: &Runtime) -> String {
+    let entities = rt.system_model.entities.values().map(|e| format!(
+        "{{\"id\":\"{}\",\"kind\":\"{:?}\",\"label\":\"{}\",\"evidence\":{}}}",
+        json_escape(&e.id), e.kind, json_escape(&e.label), e.evidence_ids.len()
+    )).collect::<Vec<_>>().join(",");
+    let relations = rt.system_model.relations.iter().map(|r| format!(
+        "{{\"from\":\"{}\",\"relation\":\"{}\",\"to\":\"{}\",\"evidence\":{}}}",
+        json_escape(&r.from), json_escape(&r.relation), json_escape(&r.to), r.evidence_ids.len()
+    )).collect::<Vec<_>>().join(",");
+    format!("{{\"entities\":[{}],\"relations\":[{}],\"evidence\":{}}}",
+        entities, relations, rt.system_model.evidence.len())
+}
+
 fn models_json(rt: &Runtime) -> String {
     let models = rt.model_router.candidates().iter().map(|c| format!(
         "{{\"provider\":\"{}\",\"model\":\"{}\",\"healthy\":{},\"quota_tokens\":{},\"cost_micros\":{},\"latency_ms\":{}}}",
@@ -84,6 +98,7 @@ fn handle(mut stream: TcpStream, rt: &mut Runtime, index: &str) {
         ("GET", "/api/agents") => response(&mut stream, "200 OK", "application/json", &format!("[{}]", agents_json(rt))),
         ("GET", "/api/workflow") => response(&mut stream, "200 OK", "application/json", &workflow_json(rt)),
         ("GET", "/api/models") => response(&mut stream, "200 OK", "application/json", &models_json(rt)),
+        ("GET", "/api/system") => response(&mut stream, "200 OK", "application/json", &system_json(rt)),
         ("GET", "/api/health") => response(&mut stream, "200 OK", "application/json", "{\"ok\":true}"),
         ("POST", "/api/tick") => {
             let cycle = rt.run_cycle();
