@@ -1,0 +1,10 @@
+[package]
+name = "os-planner"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+os-economy = { path = "../economy" }
+os-revenue = { path = "../revenue" }
+os-execution = { path = "../execution" }
+os-governance = { path = "../governance" }
