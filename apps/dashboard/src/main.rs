@@ -33,6 +33,8 @@ fn state_json(rt: &Runtime) -> String {
             Event::HeartbeatStarted { agent } => format!("heartbeat started: {agent}"),
             Event::HeartbeatFinished { agent, status } => format!("heartbeat finished: {agent} / {status}"),
             Event::AgentHandoff { work_item_id, from_agent, to_agent } => format!("handoff: {work_item_id} / {from_agent} -> {to_agent}"),
+            Event::ModelRouted { task_kind, provider, model } => format!("model routed: {task_kind} / {provider} / {model}"),
+            Event::ModelFailed { task_kind, provider, model, reason } => format!("model failed: {task_kind} / {provider} / {model} / {reason}"),
             Event::RevenueStageAdvanced { opportunity_id, stage } => format!("revenue: {opportunity_id} -> {stage}"),
             Event::RevenueRecorded { cents, memo } => format!("revenue: {cents}¢ / {memo}"),
             Event::ExpenseRecorded { cents, memo } => format!("expense: {cents}¢ / {memo}"),
