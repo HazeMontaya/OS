@@ -18,6 +18,7 @@ members = [
   "crates/system-model",
   "crates/observer",
   "crates/scheduler",
+  "crates/supervisor",
   "crates/runtime",
   "apps/cli",
   "apps/dashboard",
