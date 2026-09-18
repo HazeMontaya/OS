@@ -20,6 +20,9 @@ members = [
   "crates/tools",
   "crates/automation",
   "crates/system",
+  "crates/economy",
+  "crates/governance",
+  "crates/survival",
   "crates/runtime",
   "crates/kernel",
 ]
