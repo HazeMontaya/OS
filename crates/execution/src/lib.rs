@@ -64,7 +64,17 @@ impl ExecutionEngine {
             },
             ToolRequest::RunCommand{program,args} => {
                 if !context.allowed_commands.iter().any(|x|x==program) { return Self::failed(planned,format!("command not allowlisted: {program}")); }
-                let mut child=match Command::new(program).args(args).current_dir(&context.workspace_root).spawn(){ Ok(c)=>c, Err(e)=>return Self::failed(planned,e.to_string()) };\n                let started=Instant::now();\n                let output=loop {\n                    match child.try_wait(){\n                        Ok(Some(_))=>break child.wait_with_output().ok(),\n                        Ok(None) if started.elapsed()>=context.command_timeout=>{let _=child.kill();let _=child.wait();return Self::failed(planned,"command timed out".into());}\n                        Ok(None)=>thread::sleep(Duration::from_millis(10)),\n                        Err(e)=>return Self::failed(planned,e.to_string()),\n                    }\n                };\n                match output{
+                let mut child=match Command::new(program).args(args).current_dir(&context.workspace_root).spawn(){ Ok(c)=>c, Err(e)=>return Self::failed(planned,e.to_string()) };
+                let started=Instant::now();
+let output=loop {
+match child.try_wait(){
+Ok(Some(_))=>break child.wait_with_output().ok(),
+Ok(None) if started.elapsed()>=context.command_timeout=>{let _=child.kill();let _=child.wait();return Self::failed(planned,"command timed out".into());}
+Ok(None)=>thread::sleep(Duration::from_millis(10)),
+Err(e)=>return Self::failed(planned,e.to_string()),
+}
+};
+match output{
                     Ok(o)=>ToolOutput{success:o.status.success(),stdout:String::from_utf8_lossy(&o.stdout[..o.stdout.len().min(context.max_output_bytes)]).into_owned(),stderr:String::from_utf8_lossy(&o.stderr[..o.stderr.len().min(context.max_output_bytes)]).into_owned()},
                     Err(e)=>ToolOutput{success:false,stdout:String::new(),stderr:e.to_string()},
                 }
