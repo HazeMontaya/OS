@@ -30,6 +30,7 @@ struct PersistedOrchestrationState {
     workspaces: Vec<os_orchestration::AgentWorkspace>,
     decisions: Vec<DecisionRecord>,
     goals: GoalGraph,
+    scheduler: Scheduler,
 }
 
 pub struct Runtime{
@@ -211,7 +212,7 @@ impl Runtime{
          }
      }
      for p in &self.opportunities { writeln!(f,"opportunity\t{}\t{}\t{}\t{}\t{}\t{}\t{:?}",esc(&p.opportunity.id),esc(&p.opportunity.name),esc(&p.opportunity.hypothesis),p.opportunity.expected_revenue_cents,p.opportunity.expected_cost_cents,p.opportunity.confidence_bps,p.stage)?; }
-     f.sync_all()?; std::fs::rename(tmp,path)?; self.system_model.save_json(path.with_extension("system.json"))?; let orchestration=PersistedOrchestrationState{work_items:self.work_items.clone(),workspaces:self.workspaces.all().cloned().collect(),decisions:self.decisions.clone(),goals:self.goals.clone()}; let data=serde_json::to_vec_pretty(&orchestration).map_err(|e|std::io::Error::new(std::io::ErrorKind::InvalidData,e.to_string()))?; std::fs::write(path.with_extension("orchestration.json"),data)?; Ok(())
+     f.sync_all()?; std::fs::rename(tmp,path)?; self.system_model.save_json(path.with_extension("system.json"))?; let orchestration=PersistedOrchestrationState{work_items:self.work_items.clone(),workspaces:self.workspaces.all().cloned().collect(),decisions:self.decisions.clone(),goals:self.goals.clone(),scheduler:self.scheduler.clone()}; let data=serde_json::to_vec_pretty(&orchestration).map_err(|e|std::io::Error::new(std::io::ErrorKind::InvalidData,e.to_string()))?; std::fs::write(path.with_extension("orchestration.json"),data)?; Ok(())
  }
  pub fn load_state(&mut self, path: impl AsRef<std::path::Path>) -> std::io::Result<()> {
      use std::io::{BufRead,BufReader};
@@ -238,7 +239,7 @@ impl Runtime{
      }
      self.system_model=SystemModel::load_json(state_path.with_extension("system.json"))?;
      let orchestration_path=path.as_ref().with_extension("orchestration.json");
-     if let Ok(data)=std::fs::read(&orchestration_path) { if let Ok(orchestration)=serde_json::from_slice::<PersistedOrchestrationState>(&data) { self.work_items=orchestration.work_items; self.workspaces.replace_all(orchestration.workspaces); self.decisions=orchestration.decisions; self.goals=orchestration.goals; } }
+     if let Ok(data)=std::fs::read(&orchestration_path) { if let Ok(orchestration)=serde_json::from_slice::<PersistedOrchestrationState>(&data) { self.work_items=orchestration.work_items; self.workspaces.replace_all(orchestration.workspaces); self.decisions=orchestration.decisions; self.goals=orchestration.goals; self.scheduler=orchestration.scheduler; } }
      Ok(())
  }
  pub fn load_journals(&mut self, events: impl AsRef<std::path::Path>, memory: impl AsRef<std::path::Path>) -> std::io::Result<()> {
